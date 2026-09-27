@@ -131,7 +131,8 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     rin: []
   };
   
-  let pendingHandoffNote = "";
+  let handoffPromise: Promise<string> | null = null;
+  let oldPersonaNameForHandoff = "";
 
   while (true) {
     const input = await rl.question(chalk.green("👤 You ❯ "));
@@ -201,43 +202,30 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     if (input.startsWith("/persona ")) {
       const newPersona = input.split(" ")[1]?.toLowerCase();
       if (newPersona && ["eli", "rei", "sora", "rin"].includes(newPersona) && newPersona !== activePersona) {
-        // LLM Context Handoff Logic
+        // Asynchronous Background Handoff Synthesis
         const currentHistory = memory[activePersona];
-        const oldPersona = activePersona;
-        
-        let handoffSummary = "";
+        oldPersonaNameForHandoff = activePersona;
 
         if (currentHistory.length > 0) {
-          const handoffSpinner = ora(`Synthesizing context for ${newPersona.toUpperCase()}...`).start();
-          try {
-            const aiModel = await getAiClient(provider, model, config);
+          getAiClient(provider, model, config).then(aiModel => {
             const evaluationMessages = [...currentHistory];
             evaluationMessages.push({
               role: "user",
               content: "[System Instruction]: You are a senior developer handing off a shift to a colleague. Read our conversation history above and write a highly concise, purely technical summary of my current situation. What file am I working on? What is the exact bug or feature goal? Do not include greetings or fluff. Use bullet points."
             });
             
-            const summaryRun = await generateText({
+            handoffPromise = generateText({
               model: aiModel,
               messages: evaluationMessages
-            });
-            handoffSummary = summaryRun.text;
-          } catch (e: any) {
-            handoffSummary = "Error: Failed to synthesize context. " + e.message;
-            console.log(chalk.red(`\n[!] Context Handoff Failed: ${e.message}`));
-          }
-          handoffSpinner.stop();
+            }).then(res => res.text).catch(e => "Error: Failed to synthesize context. " + e.message);
+          });
         }
 
         activePersona = newPersona as any;
         config.activePersona = activePersona;
         setConfig(config);
 
-        if (handoffSummary && !handoffSummary.startsWith("Error")) {
-          pendingHandoffNote = `[SYSTEM HANDOFF NOTE: You have just replaced ${oldPersona.toUpperCase()}. The user's current working context is as follows:\n\n${handoffSummary}\n\nPlease smoothly resume assisting the user based on this context without explicitly mentioning this handoff note.]`;
-        }
-
-        console.log(chalk.gray(`[ℹ] Persona changed to ${activePersona.toUpperCase()}`));
+        console.log(chalk.gray(`[ℹ] Persona changed to ${activePersona.toUpperCase()} (Synthesizing context in background...)`));
       } else if (newPersona === activePersona) {
         console.log(chalk.gray(`[ℹ] Persona is already ${activePersona.toUpperCase()}`));
       } else {
@@ -247,9 +235,16 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     }
 
     let finalInput = input;
-    if (pendingHandoffNote) {
-      finalInput = `${pendingHandoffNote}\n\nUser Message: ${input}`;
-      pendingHandoffNote = "";
+    if (handoffPromise) {
+      const spinner = ora(`Waiting for context handoff to complete...`).start();
+      const handoffSummary = await handoffPromise;
+      spinner.stop();
+      handoffPromise = null;
+      
+      if (handoffSummary && !handoffSummary.startsWith("Error")) {
+        const pendingHandoffNote = `[SYSTEM HANDOFF NOTE: You have just replaced ${oldPersonaNameForHandoff.toUpperCase()}. The user's current working context is as follows:\n\n${handoffSummary}\n\nPlease smoothly resume assisting the user based on this context without explicitly mentioning this handoff note.]`;
+        finalInput = `${pendingHandoffNote}\n\nUser Message: ${input}`;
+      }
     }
 
     memory[activePersona].push({ role: "user", content: finalInput });
