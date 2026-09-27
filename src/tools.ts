@@ -2,6 +2,12 @@ import { tool } from "ai";
 import { z } from "zod";
 import fs from "fs/promises";
 import path from "path";
+import * as readline from "readline/promises";
+import { exec } from "child_process";
+import { promisify } from "util";
+import chalk from "chalk";
+
+const execAsync = promisify(exec);
 
 export const readFileTool = tool({
   description: "Read the contents of a file in the user's workspace.",
@@ -37,4 +43,36 @@ export const listDirTool = tool({
       return `Error listing directory: ${error.message}`;
     }
   },
+});
+
+export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner: () => void) => tool({
+  description: "Execute a terminal/shell command on the user's system. Use this to create files, install dependencies, or run scripts.",
+  parameters: z.object({
+    command: z.string().describe("The bash/powershell command to execute"),
+  }),
+  // @ts-ignore
+  execute: async ({ command }: { command: string }) => {
+    onPauseSpinner();
+    
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    let answer = "n";
+    try {
+      console.log(""); // Newline for clean output
+      answer = await rl.question(chalk.yellow(`⚠️  Elenalyse is requesting to run command:\n> ${chalk.bold(command)}\nAllow execution? [Y/n]: `));
+    } finally {
+      rl.close();
+      onResumeSpinner();
+    }
+
+    if (answer.toLowerCase() !== 'y') {
+      return "Execution denied by the user. Ask the user for alternative approaches.";
+    }
+
+    try {
+      const { stdout, stderr } = await execAsync(command, { cwd: process.cwd() });
+      return `STDOUT:\n${stdout}\nSTDERR:\n${stderr}`;
+    } catch (err: any) {
+      return `Error executing command: ${err.message}`;
+    }
+  }
 });

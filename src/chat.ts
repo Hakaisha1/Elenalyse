@@ -5,7 +5,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { getConfig } from "./config.js";
 import { getPersonaPrompt, getPersonaColor } from "./personas.js";
-import { readFileTool, listDirTool } from "./tools.js";
+import { readFileTool, listDirTool, createRunCommandTool } from "./tools.js";
 
 export async function handleChat(message: string, voiceEnabled: boolean) {
   if (!message) {
@@ -49,7 +49,11 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
       prompt: message,
       tools: {
         readFile: readFileTool,
-        listDir: listDirTool
+        listDir: listDirTool,
+        runCommand: createRunCommandTool(
+          () => spinner.stop(),
+          () => spinner.start()
+        )
       },
       // @ts-ignore
       maxSteps: 5,
