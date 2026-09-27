@@ -322,7 +322,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     try {
       const aiModel = await getAiClient(provider, model, config);
 
-      const { text, toolCalls, toolResults, usage } = await generateText({
+      const { text, toolCalls, toolResults, usage, response } = await generateText({
         model: aiModel,
         system: await getPersonaPrompt(activePersona, voiceEnabled),
         messages: memory[activePersona],
@@ -331,7 +331,8 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
           listDir: listDirTool,
           runCommand: createRunCommandTool(
             () => spinner.stop(),
-            () => spinner.start()
+            () => spinner.start(),
+            rl
           )
         },
         // @ts-ignore
@@ -342,9 +343,14 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
 
       let finalText = text;
       
+      // Fallback for LLMs that don't support native maxSteps
       if (!text && toolCalls && toolCalls.length > 0 && toolResults && toolResults.length > 0) {
         const toolSpinner = ora(`Evaluating ${toolCalls[0].toolName} results...`).start();
         const evaluationMessages = [...memory[activePersona]];
+        
+        // Push the manual tool call and result to history so it isn't lost
+        evaluationMessages.push({ role: "assistant", content: "", toolCalls: toolCalls as any });
+        evaluationMessages.push({ role: "tool", content: toolResults as any });
         
         evaluationMessages.push({
           role: "user",
@@ -363,13 +369,23 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
           (usage as any).promptTokens += (secondRun.usage as any).promptTokens || 0;
           (usage as any).completionTokens += (secondRun.usage as any).completionTokens || 0;
         }
+
+        // Push manual history
+        memory[activePersona].push({ role: "assistant", content: "", toolCalls: toolCalls as any });
+        memory[activePersona].push({ role: "tool", content: toolResults as any });
+        memory[activePersona].push({ role: "assistant", content: finalText });
+      } else {
+        // AI SDK handled it natively with maxSteps, push the full response history
+        if (response && response.messages) {
+          memory[activePersona].push(...response.messages);
+        } else {
+          memory[activePersona].push({ role: "assistant", content: finalText });
+        }
       }
 
       let { displayText, voiceLines } = extractVoiceSegments(finalText);
       console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + displayText);
       console.log(chalk.gray(`[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]\n`));
-      
-      memory[activePersona].push({ role: "assistant", content: finalText });
 
       if (voiceEnabled && voiceLines.length > 0) {
         const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;

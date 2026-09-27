@@ -57,7 +57,7 @@ export const listDirTool = tool({
   },
 });
 
-export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner: () => void) => tool({
+export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner: () => void, rlInterface?: any) => tool({
   description: "Execute a terminal/shell command on the user's system. IMPORTANT: The user is on a WINDOWS system. You MUST use Windows PowerShell/CMD syntax (e.g., use 'del' instead of 'rm', 'mkdir' without '-p', 'type nul > file.txt' instead of 'touch', and 'dir' instead of 'ls').",
   parameters: z.object({
     command: z.string().describe("The bash/powershell command to execute"),
@@ -66,13 +66,20 @@ export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner
   execute: async ({ command }: { command: string }) => {
     onPauseSpinner();
     
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     let answer = "n";
     try {
       console.log(""); // Newline for clean output
-      answer = await rl.question(chalk.yellow(`⚠️  Elenalyse is requesting to run command:\n> ${chalk.bold(command)}\nAllow execution? [Y/n]: `));
+      const promptText = chalk.yellow(`⚠️  Elenalyse is requesting to run command:\n> ${chalk.bold(command)}\nAllow execution? [Y/n]: `);
+      if (rlInterface) {
+        rlInterface.resume();
+        answer = await rlInterface.question(promptText);
+        rlInterface.pause();
+      } else {
+        const tempRl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        answer = await tempRl.question(promptText);
+        tempRl.close();
+      }
     } finally {
-      rl.close();
       onResumeSpinner();
     }
 
