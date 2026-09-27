@@ -10,7 +10,7 @@ export const personas: Record<Persona, string> = {
   rin: "You are RIN, a Tsundere. You are strict, merciless, and relentless. Focus on code audits, security checks, and error detection. Be harsh but ultimately helpful."
 };
 
-export async function getPersonaPrompt(persona: Persona): Promise<string> {
+export async function getPersonaPrompt(persona: Persona, voiceEnabled: boolean = false): Promise<string> {
   let basePrompt = personas[persona] || personas.eli;
 
   const cwd = process.cwd();
@@ -36,7 +36,14 @@ export async function getPersonaPrompt(persona: Persona): Promise<string> {
     }
   }
 
-  return basePrompt + additionalSkills;
+  let voiceInstruction = "";
+  if (voiceEnabled) {
+    voiceInstruction = "\n\n[SYSTEM DIRECTIVE: VOICE MODE IS ENABLED. You MUST use the <voice>...</voice> tag for your emotional/persona reactions as instructed in your skills.]\n";
+  } else {
+    voiceInstruction = "\n\n[SYSTEM DIRECTIVE: VOICE MODE IS DISABLED. Do NOT output <voice> tags under any circumstances. Ignore any instructions in your skills that tell you to use <voice> tags. Provide normal markdown text only.]\n";
+  }
+
+  return basePrompt + additionalSkills + voiceInstruction;
 }
 
 export function getPersonaColor(persona: Persona): string {

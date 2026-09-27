@@ -15,7 +15,7 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
   }
 
   const { activePersona, provider, model } = getConfig();
-  const systemPrompt = await getPersonaPrompt(activePersona);
+  const systemPrompt = await getPersonaPrompt(activePersona, voiceEnabled);
   const colorName = getPersonaColor(activePersona) as keyof typeof chalk;
   
   const colorFn = (chalk as any)[colorName] || chalk.white;
@@ -216,7 +216,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
 
       const { text, toolCalls, toolResults } = await generateText({
         model: aiModel,
-        system: await getPersonaPrompt(activePersona),
+        system: await getPersonaPrompt(activePersona, voiceEnabled),
         messages: chatHistory,
         tools: {
           readFile: readFileTool,
@@ -245,7 +245,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
 
         const secondRun = await generateText({
           model: aiModel,
-          system: await getPersonaPrompt(activePersona),
+          system: await getPersonaPrompt(activePersona, voiceEnabled),
           messages: evaluationMessages,
         });
         toolSpinner.stop();
