@@ -36,10 +36,12 @@
   "dependencies": {
     "@ai-sdk/google": "^4.0.82",
     "@ai-sdk/openai": "^4.0.78",
+    "7zip-bin": "^5.2.0",
     "ai": "^7.0.117",
     "chalk": "^6.0.1",
     "commander": "^15.0.0",
     "gray-matter": "^4.0.3",
+    "node-7z": "^3.0.0",
     "ora": "^9.4.1",
     "zod": "^4.6.5"
   },
