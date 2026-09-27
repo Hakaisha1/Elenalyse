@@ -211,10 +211,15 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
           const handoffSpinner = ora(`Synthesizing context for ${newPersona.toUpperCase()}...`).start();
           try {
             const aiModel = await getAiClient(provider, model, config);
+            const evaluationMessages = [...currentHistory];
+            evaluationMessages.push({
+              role: "user",
+              content: "[System Instruction]: You are a senior developer handing off a shift to a colleague. Read our conversation history above and write a highly concise, purely technical summary of my current situation. What file am I working on? What is the exact bug or feature goal? Do not include greetings or fluff. Use bullet points."
+            });
+            
             const summaryRun = await generateText({
               model: aiModel,
-              system: "You are a senior developer handing off a shift to a colleague. Read the provided conversation history and write a highly concise, purely technical summary of the user's current situation. What file are they working on? What is the exact bug or feature goal? Do not include greetings or fluff. Use bullet points.",
-              messages: currentHistory
+              messages: evaluationMessages
             });
             handoffSummary = summaryRun.text;
           } catch (e: any) {
