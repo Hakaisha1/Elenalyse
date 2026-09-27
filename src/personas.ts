@@ -43,7 +43,7 @@ export async function getPersonaPrompt(persona: Persona, voiceEnabled: boolean =
 
   let voiceInstruction = "";
   if (voiceEnabled) {
-    voiceInstruction = "\n\n[SYSTEM DIRECTIVE: VOICE MODE IS ENABLED. You MUST use the <voice>...</voice> tag for your emotional/persona reactions as instructed in your skills.]\n";
+    voiceInstruction = "\n\n[SYSTEM DIRECTIVE: VOICE MODE IS ENABLED. You MUST use the <voice>...</voice> tag for your emotional/persona reactions. CRITICAL: The text inside <voice> tags MUST be written entirely in Japanese (Kanji/Hiragana/Katakana) because it is fed to a Japanese TTS engine. The content inside the voice tags will be hidden from the UI, so ensure any critical technical information or English explanations are placed OUTSIDE the voice tags in standard markdown.]\n";
   } else {
     voiceInstruction = "\n\n[SYSTEM DIRECTIVE: VOICE MODE IS DISABLED. Do NOT output <voice> tags under any circumstances. Ignore any instructions in your skills that tell you to use <voice> tags. Provide normal markdown text only.]\n";
   }

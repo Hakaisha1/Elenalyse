@@ -18,9 +18,9 @@ function extractVoiceSegments(responseText: string): { displayText: string; voic
   const voiceLines: string[] = [];
   const displayText = responseText.replace(/<voice>([\s\S]*?)<\/voice>/g, (_, content) => {
     voiceLines.push(content.trim());
-    return content.trim(); // show text but remove tag
+    return ""; // Hide the voice text from the terminal
   });
-  return { displayText, voiceLines };
+  return { displayText: displayText.trim(), voiceLines };
 }
 
 async function playVoiceLines(voiceLines: string[], speakerId: number) {
