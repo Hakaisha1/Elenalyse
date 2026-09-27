@@ -215,8 +215,9 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
               messages: currentHistory
             });
             handoffSummary = summaryRun.text;
-          } catch (e) {
-            handoffSummary = "Error: Failed to synthesize context.";
+          } catch (e: any) {
+            handoffSummary = "Error: Failed to synthesize context. " + e.message;
+            console.log(chalk.red(`\n[!] Context Handoff Failed: ${e.message}`));
           }
           handoffSpinner.stop();
         }
