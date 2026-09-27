@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.env
+.env.local
+*.log
+desktop/src-tauri/target/
+desktop/dist/
+desktop/node_modules/
+*.tgz
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
