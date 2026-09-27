@@ -162,8 +162,18 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
 
   if (voiceEnabled) {
     try {
-      await ensureEngineDownloaded(msg => console.log(chalk.gray(msg)));
-      await ensureEngineRunning();
+      // Check if Voicevox is already running (e.g. user manually opened Voicevox Editor)
+      const isAlreadyRunning = await fetch("http://127.0.0.1:50021/version")
+        .then(res => res.ok)
+        .catch(() => false);
+
+      if (!isAlreadyRunning) {
+        await ensureEngineDownloaded(msg => console.log(chalk.gray(msg)));
+        await ensureEngineRunning();
+      } else {
+        console.log(chalk.green("[ℹ] Local VOICEVOX Engine detected. Skipping download."));
+      }
+
       console.log(chalk.gray(
         "\nNote: Voice is generated via VOICEVOX. If you share the voice output publicly, " +
         "you must provide credit according to the character's terms — see README for details.\n"
