@@ -34,6 +34,7 @@
   },
   "homepage": "https://github.com/Hakaisha1/Elenalyse#readme",
   "dependencies": {
+    "@ai-sdk/google": "^4.0.82",
     "@ai-sdk/openai": "^4.0.78",
     "ai": "^7.0.117",
     "chalk": "^6.0.1",

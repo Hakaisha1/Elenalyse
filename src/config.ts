@@ -5,12 +5,18 @@ import { Persona } from "./personas.js";
 
 const configPath = path.join(os.homedir(), ".elenalyserc.json");
 
-interface Config {
+export type Provider = "openrouter" | "openai" | "local" | "google";
+
+export interface Config {
   activePersona: Persona;
+  provider: Provider;
+  model: string;
 }
 
 const defaultConfig: Config = {
-  activePersona: "eli"
+  activePersona: "eli",
+  provider: "openrouter",
+  model: "openrouter/free"
 };
 
 export function getConfig(): Config {
