@@ -1,5 +1,8 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import { handleChat } from "./chat.js";
+import { setConfig } from "./config.js";
+import { Persona, personas } from "./personas.js";
 
 const program = new Command();
 
@@ -13,14 +16,8 @@ program
   .description("Chat with the active persona")
   .argument("[message]", "The message to send to the assistant")
   .option("-v, --voice", "Enable TTS voice response")
-  .action((message, options) => {
-    console.log(chalk.blue("Elenalyse (ELI):"), "This is a simulated chat response. AI engine not yet connected.");
-    if (message) {
-      console.log(chalk.gray(`You asked: "${message}"`));
-    }
-    if (options.voice) {
-      console.log(chalk.yellow("(Simulation: Playing TTS audio...)"));
-    }
+  .action(async (message, options) => {
+    await handleChat(message, options.voice);
   });
 
 const personaCmd = program
@@ -30,8 +27,14 @@ const personaCmd = program
 personaCmd
   .command("set <name>")
   .description("Set active persona (eli, rei, sora, rin)")
-  .action((name) => {
-    console.log(chalk.green(`Active persona set to: ${name.toUpperCase()}`));
+  .action((name: string) => {
+    const lowerName = name.toLowerCase() as Persona;
+    if (!personas[lowerName]) {
+      console.log(chalk.red(`Error: Unknown persona '${name}'. Available personas: eli, rei, sora, rin.`));
+      process.exit(1);
+    }
+    setConfig({ activePersona: lowerName });
+    console.log(chalk.green(`Active persona set to: ${lowerName.toUpperCase()}`));
   });
 
 program.parse();
