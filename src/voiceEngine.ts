@@ -80,7 +80,7 @@ export async function ensureEngineDownloaded(onProgress?: (msg: string) => void)
     });
 
     stream.on('end', () => resolve());
-    stream.on('error', (err) => reject(err));
+    stream.on('error', (err: any) => reject(err));
   });
 
   fs.unlinkSync(temp7zPath);
