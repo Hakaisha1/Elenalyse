@@ -4,9 +4,38 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import chalk from "chalk";
 import ora from "ora";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import sound from "sound-play";
 import { getConfig, setConfig } from "./config.js";
-import { getPersonaPrompt, getPersonaColor } from "./personas.js";
+import { getPersonaPrompt, getPersonaColor, PERSONA_SPEAKER_MAP } from "./personas.js";
 import { readFileTool, listDirTool, createRunCommandTool } from "./tools.js";
+import { ensureEngineDownloaded, ensureEngineRunning } from "./voiceEngine.js";
+import { synthesizeSpeech } from "./tts.js";
+
+function extractVoiceSegments(responseText: string): { displayText: string; voiceLines: string[] } {
+  const voiceLines: string[] = [];
+  const displayText = responseText.replace(/<voice>([\s\S]*?)<\/voice>/g, (_, content) => {
+    voiceLines.push(content.trim());
+    return content.trim(); // show text but remove tag
+  });
+  return { displayText, voiceLines };
+}
+
+async function playVoiceLines(voiceLines: string[], speakerId: number) {
+  for (let i = 0; i < voiceLines.length; i++) {
+    try {
+      const buffer = await synthesizeSpeech(voiceLines[i], speakerId);
+      const tempPath = path.join(os.tmpdir(), `elenalyse_voice_${Date.now()}_${i}.wav`);
+      fs.writeFileSync(tempPath, buffer);
+      await sound.play(tempPath);
+      fs.unlinkSync(tempPath);
+    } catch (e: any) {
+      console.log(chalk.red(`\n[TTS Error: ${e.message}]`));
+    }
+  }
+}
 
 export async function handleChat(message: string, voiceEnabled: boolean) {
   if (!message) {
@@ -69,7 +98,11 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
     console.log(chalk.gray(`\n[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]`));
 
     if (voiceEnabled) {
-      console.log(chalk.magenta("\n[TTS Feature is currently mocked and not yet implemented]"));
+      let { displayText, voiceLines } = extractVoiceSegments(text);
+      if (voiceLines.length > 0) {
+        const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
+        playVoiceLines(voiceLines, speakerId);
+      }
     }
   } catch (error: any) {
     spinner.fail("Failed to get response from AI engine.");
@@ -126,6 +159,20 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
   };
 
   printWelcome();
+
+  if (voiceEnabled) {
+    try {
+      await ensureEngineDownloaded(msg => console.log(chalk.gray(msg)));
+      await ensureEngineRunning();
+      console.log(chalk.gray(
+        "\nNote: Voice is generated via VOICEVOX. If you share the voice output publicly, " +
+        "you must provide credit according to the character's terms — see README for details.\n"
+      ));
+    } catch (e: any) {
+      console.log(chalk.red(`Failed to initialize Voice Engine: ${e.message}`));
+      voiceEnabled = false; // Fallback to text only
+    }
+  }
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   
@@ -308,10 +355,16 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         }
       }
 
-      console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + finalText);
+      let { displayText, voiceLines } = extractVoiceSegments(finalText);
+      console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + displayText);
       console.log(chalk.gray(`[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]\n`));
       
       memory[activePersona].push({ role: "assistant", content: finalText });
+
+      if (voiceEnabled && voiceLines.length > 0) {
+        const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
+        playVoiceLines(voiceLines, speakerId); // Fire and forget
+      }
 
     } catch (error: any) {
       spinner.stop();

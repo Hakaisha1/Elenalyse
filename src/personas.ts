@@ -60,3 +60,12 @@ export function getPersonaColor(persona: Persona): string {
   };
   return colors[persona] || "cyan";
 }
+
+// Map each persona to a specific VOICEVOX Speaker ID.
+// You can discover these IDs by hitting GET http://127.0.0.1:50021/speakers once the engine runs.
+export const PERSONA_SPEAKER_MAP: Record<Persona, number> = {
+  eli: 2,   // Shikoku Metan (Normal) - Friendly, warm, patient assistant.
+  rei: 14,  // Kasukabe Tsumugi (Normal) - Calm, cold, highly efficient (Kuudere).
+  sora: 29,  // Zundamon (Normal) - Cheerful, energetic, creative (Deredere).
+  rin: 7,   // Zundamon (Tsundere) - Strict, harsh, but helpful (Tsundere).
+};

@@ -43,6 +43,7 @@
     "gray-matter": "^4.0.3",
     "node-7z": "^3.0.0",
     "ora": "^9.4.1",
+    "sound-play": "^1.1.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
