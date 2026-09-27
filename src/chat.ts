@@ -115,7 +115,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     console.log(chalk.gray(`[ℹ] Model    : ${model}`));
     console.log(chalk.gray(`[ℹ] Persona  : ${activePersona.toUpperCase()}`));
     console.log(chalk.gray("---------------------------------------------------"));
-    console.log(chalk.cyan("Ketik pesan Anda di bawah ini. Ketik '/help' untuk melihat daftar perintah."));
+    console.log(chalk.cyan("Type your message below. Type '/help' to see the list of commands."));
     console.log(chalk.magenta("===================================================\n"));
   };
 
@@ -125,7 +125,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
   let chatHistory: any[] = [];
 
   while (true) {
-    const input = await rl.question(chalk.green("👤 Anda ❯ "));
+    const input = await rl.question(chalk.green("👤 You ❯ "));
     if (!input.trim()) continue;
 
     if (input.startsWith("/exit")) {
@@ -139,14 +139,14 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     }
 
     if (input.startsWith("/help")) {
-      console.log(chalk.cyan("\nDaftar Perintah Tersedia:"));
-      console.log(chalk.cyan("  /help           : Menampilkan menu bantuan ini"));
-      console.log(chalk.cyan("  /persona <nama> : Mengganti persona (eli/rei/sora/rin)"));
-      console.log(chalk.cyan("  /model <nama>   : Mengganti model (contoh: gemini-3.5-flash-lite)"));
-      console.log(chalk.cyan("  /provider <nama>: Mengganti provider (google/openai/openrouter/local)"));
-      console.log(chalk.cyan("  /api <provider> <key> : Menyimpan API Key (contoh: /api google AIza...)"));
-      console.log(chalk.cyan("  /clear          : Membersihkan layar"));
-      console.log(chalk.cyan("  /exit           : Keluar dari aplikasi\n"));
+      console.log(chalk.cyan("\nAvailable Commands:"));
+      console.log(chalk.cyan("  /help           : Show this help menu"));
+      console.log(chalk.cyan("  /persona <name> : Change persona (eli/rei/sora/rin)"));
+      console.log(chalk.cyan("  /model <name>   : Change model (e.g., gemini-3.5-flash-lite)"));
+      console.log(chalk.cyan("  /provider <name>: Change provider (google/openai/openrouter/local)"));
+      console.log(chalk.cyan("  /api <prov> <key> : Save API Key (e.g., /api google AIza...)"));
+      console.log(chalk.cyan("  /clear          : Clear the console screen"));
+      console.log(chalk.cyan("  /exit           : Exit the application\n"));
       continue;
     }
 
@@ -158,9 +158,9 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         config.apiKeys = config.apiKeys || {};
         config.apiKeys[prov] = key;
         setConfig(config);
-        console.log(chalk.gray(`[ℹ] API Key untuk ${prov} telah disimpan.`));
+        console.log(chalk.gray(`[ℹ] API Key for ${prov} has been saved.`));
       } else {
-        console.log(chalk.red("Format salah! Gunakan: /api <provider> <key>"));
+        console.log(chalk.red("Invalid format! Use: /api <provider> <key>"));
       }
       continue;
     }
@@ -171,7 +171,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         model = newModel;
         config.model = model;
         setConfig(config);
-        console.log(chalk.gray(`[ℹ] Model diubah menjadi ${model}`));
+        console.log(chalk.gray(`[ℹ] Model changed to ${model}`));
       }
       continue;
     }
@@ -182,9 +182,9 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         provider = newProvider.toLowerCase() as any;
         config.provider = provider;
         setConfig(config);
-        console.log(chalk.gray(`[ℹ] Provider diubah menjadi ${provider}`));
+        console.log(chalk.gray(`[ℹ] Provider changed to ${provider}`));
       } else {
-        console.log(chalk.red("Provider tidak valid! Gunakan: google, openai, openrouter, local"));
+        console.log(chalk.red("Invalid provider! Use: google, openai, openrouter, local"));
       }
       continue;
     }
@@ -195,9 +195,9 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         activePersona = newPersona.toLowerCase() as any;
         config.activePersona = activePersona;
         setConfig(config);
-        console.log(chalk.gray(`[ℹ] Persona diubah menjadi ${activePersona.toUpperCase()}`));
+        console.log(chalk.gray(`[ℹ] Persona changed to ${activePersona.toUpperCase()}`));
       } else {
-        console.log(chalk.red("Persona tidak valid! Gunakan: eli, rei, sora, rin"));
+        console.log(chalk.red("Invalid persona! Use: eli, rei, sora, rin"));
       }
       continue;
     }
@@ -257,7 +257,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
 
     } catch (error: any) {
       spinner.stop();
-      console.log(chalk.red("\n✖ Failed to get response dari mesin AI."));
+      console.log(chalk.red("\n✖ Failed to get response from AI engine."));
       console.log(chalk.red(error.message));
       chatHistory.pop(); // Revert user message so they can retry
     } finally {
