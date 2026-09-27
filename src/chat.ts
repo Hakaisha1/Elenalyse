@@ -213,18 +213,18 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         oldPersonaNameForHandoff = activePersona;
 
         if (currentHistory.length > 0) {
-          getAiClient(provider, model, config).then(aiModel => {
+          handoffPromise = getAiClient(provider, model, config).then(aiModel => {
             const evaluationMessages = [...currentHistory];
             evaluationMessages.push({
               role: "user",
               content: "[System Instruction]: You are a senior developer handing off a shift to a colleague. Read our conversation history above and write a highly concise, purely technical summary of my current situation. What file am I working on? What is the exact bug or feature goal? Do not include greetings or fluff. Use bullet points."
             });
             
-            handoffPromise = generateText({
+            return generateText({
               model: aiModel,
               messages: evaluationMessages
-            }).then(res => res.text).catch(e => "Error: Failed to synthesize context. " + e.message);
-          });
+            }).then(res => res.text);
+          }).catch(e => "Error: Failed to synthesize context. " + e.message);
         }
 
         activePersona = newPersona as any;
