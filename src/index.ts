@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { handleChat } from "./chat.js";
+import { handleChat, startInteractiveChat } from "./chat.js";
 import { setConfig, Provider } from "./config.js";
 import { Persona, personas } from "./personas.js";
 
@@ -12,12 +12,24 @@ program
   .version("0.1.0");
 
 program
+  .command("start")
+  .description("Start the interactive Elenalyse REPL chat")
+  .option("-v, --voice", "Enable TTS voice response")
+  .action(async (options) => {
+    await startInteractiveChat(options.voice);
+  });
+
+program
   .command("chat")
-  .description("Chat with the active persona")
+  .description("Send a single message to the active persona")
   .argument("[message]", "The message to send to the assistant")
   .option("-v, --voice", "Enable TTS voice response")
   .action(async (message, options) => {
-    await handleChat(message, options.voice);
+    if (message) {
+      await handleChat(message, options.voice);
+    } else {
+      await startInteractiveChat(options.voice);
+    }
   });
 
 const personaCmd = program
