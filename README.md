@@ -82,12 +82,31 @@ elenalyse viz
 elenalyse float
 ```
 
+## 🗣️ Voice & TTS Engine
+
+Elenalyse utilizes the **[VOICEVOX](https://voicevox.hiroshiba.jp/)** Engine for its local, offline Text-to-Speech generation.
+
+To enable Voice Mode, start the interactive chat with the `--voice` flag:
+```bash
+elenalyse start --voice
+```
+_Note: On your first run, Elenalyse will automatically download and extract the local VOICEVOX Engine binary for your OS in the background (approx. 100MB-300MB). No Docker or external setup is required!_
+
+### Attribution (Important)
+If you record or share the voice output of Elenalyse publicly (e.g., YouTube, Twitch, Twitter), you **must** credit the VOICEVOX characters used according to their terms of service. For example:
+- **VOICEVOX:ずんだもん** (Zundamon)
+- **VOICEVOX:四国めたん** (Shikoku Metan)
+- **VOICEVOX:春日部つむぎ** (Kasukabe Tsumugi)
+
+Please review the [VOICEVOX Terms of Use](https://voicevox.hiroshiba.jp/term/) for full details before publishing audio.
+
 ---
 
 ## 🛠️ Tech Stack
 
 * **CLI Core:** Node.js, TypeScript, Commander, Chalk, Ora.
 * **LLM & Agentic Engine:** Vercel AI SDK (`ai`), Zod, Execa.
+* **TTS Engine:** Node-7z, Sound-Play, VOICEVOX Engine (Local API).
 * **Code Parser & RAG:** Gray-Matter, Dependency-Cruiser, Tree-Sitter.
 * **Desktop Overlay:** Tauri (Rust Framework), Webview2/WebKit.
 * **3D & Graphics:** Three.js, React Force Graph 3D / Spline.
