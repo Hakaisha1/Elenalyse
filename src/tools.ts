@@ -46,7 +46,7 @@ export const listDirTool = tool({
 });
 
 export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner: () => void) => tool({
-  description: "Execute a terminal/shell command on the user's system. Use this to create files, install dependencies, or run scripts.",
+  description: "Execute a terminal/shell command on the user's system. IMPORTANT: The user is on a WINDOWS system. You MUST use Windows PowerShell/CMD syntax (e.g., use 'del' instead of 'rm', 'mkdir' without '-p', 'type nul > file.txt' instead of 'touch', and 'dir' instead of 'ls').",
   parameters: z.object({
     command: z.string().describe("The bash/powershell command to execute"),
   }),
