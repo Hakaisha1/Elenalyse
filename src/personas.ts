@@ -1,5 +1,9 @@
 import fs from "fs";
-import path from "path";
+import path, { dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export type Persona = "eli" | "rei" | "sora" | "rin";
 
@@ -13,9 +17,10 @@ export const personas: Record<Persona, string> = {
 export async function getPersonaPrompt(persona: Persona, voiceEnabled: boolean = false): Promise<string> {
   let basePrompt = personas[persona] || personas.eli;
 
-  const cwd = process.cwd();
-  const globalSkillPath = path.join(cwd, "skills", "global.md");
-  const personaSkillDir = path.join(cwd, "skills", persona);
+  // Calculate the root of the elenalyse package (parent of 'dist')
+  const packageRoot = path.join(__dirname, "..");
+  const globalSkillPath = path.join(packageRoot, "skills", "global.md");
+  const personaSkillDir = path.join(packageRoot, "skills", persona);
 
   let additionalSkills = "";
 

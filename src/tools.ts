@@ -19,6 +19,12 @@ export const readFileTool = tool({
     try {
       if (!filePath) return "Error: filePath argument is required.";
       const absolutePath = path.resolve(process.cwd(), filePath);
+      
+      const relative = path.relative(process.cwd(), absolutePath);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        return "Error: Path traversal detected. Access denied.";
+      }
+
       const content = await fs.readFile(absolutePath, "utf-8");
       return content;
     } catch (error: any) {
@@ -37,6 +43,12 @@ export const listDirTool = tool({
     try {
       const targetPath = dirPath || ".";
       const absolutePath = path.resolve(process.cwd(), targetPath);
+
+      const relative = path.relative(process.cwd(), absolutePath);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        return "Error: Path traversal detected. Access denied.";
+      }
+
       const files = await fs.readdir(absolutePath, { withFileTypes: true });
       return files.map((f) => (f.isDirectory() ? `[DIR] ${f.name}` : f.name)).join("\n");
     } catch (error: any) {
