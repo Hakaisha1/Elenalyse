@@ -58,16 +58,15 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
 
       toolSpinner.stop();
       if (secondRun.usage) {
-        usage.promptTokens += secondRun.usage.promptTokens;
-        usage.completionTokens += secondRun.usage.completionTokens;
-        usage.totalTokens += secondRun.usage.totalTokens;
+        (usage as any).promptTokens += (secondRun.usage as any).promptTokens || 0;
+        (usage as any).completionTokens += (secondRun.usage as any).completionTokens || 0;
       }
       console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + secondRun.text);
     } else {
       console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + text);
     }
 
-    console.log(chalk.gray(`\n[Token Usage: ${usage.promptTokens} input / ${usage.completionTokens} output]`));
+    console.log(chalk.gray(`\n[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]`));
 
     if (voiceEnabled) {
       console.log(chalk.magenta("\n[TTS Feature is currently mocked and not yet implemented]"));
@@ -304,14 +303,13 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         finalText = secondRun.text;
         
         if (secondRun.usage) {
-          usage.promptTokens += secondRun.usage.promptTokens;
-          usage.completionTokens += secondRun.usage.completionTokens;
-          usage.totalTokens += secondRun.usage.totalTokens;
+          (usage as any).promptTokens += (secondRun.usage as any).promptTokens || 0;
+          (usage as any).completionTokens += (secondRun.usage as any).completionTokens || 0;
         }
       }
 
       console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + finalText);
-      console.log(chalk.gray(`[Token Usage: ${usage.promptTokens} input / ${usage.completionTokens} output]\n`));
+      console.log(chalk.gray(`[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]\n`));
       
       memory[activePersona].push({ role: "assistant", content: finalText });
 
