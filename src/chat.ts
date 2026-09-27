@@ -26,7 +26,7 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
     const config = getConfig();
     const aiClientFactory = await getAiClient(provider, model, config);
 
-    const { text, toolCalls, toolResults } = await generateText({
+    const { text, toolCalls, toolResults, usage } = await generateText({
       model: aiClientFactory,
       system: systemPrompt,
       prompt: message,
@@ -57,10 +57,17 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
       });
 
       toolSpinner.stop();
+      if (secondRun.usage) {
+        usage.promptTokens += secondRun.usage.promptTokens;
+        usage.completionTokens += secondRun.usage.completionTokens;
+        usage.totalTokens += secondRun.usage.totalTokens;
+      }
       console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + secondRun.text);
     } else {
       console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + text);
     }
+
+    console.log(chalk.gray(`\n[Token Usage: ${usage.promptTokens} input / ${usage.completionTokens} output]`));
 
     if (voiceEnabled) {
       console.log(chalk.magenta("\n[TTS Feature is currently mocked and not yet implemented]"));
@@ -259,7 +266,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     try {
       const aiModel = await getAiClient(provider, model, config);
 
-      const { text, toolCalls, toolResults } = await generateText({
+      const { text, toolCalls, toolResults, usage } = await generateText({
         model: aiModel,
         system: await getPersonaPrompt(activePersona, voiceEnabled),
         messages: memory[activePersona],
@@ -295,9 +302,17 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         });
         toolSpinner.stop();
         finalText = secondRun.text;
+        
+        if (secondRun.usage) {
+          usage.promptTokens += secondRun.usage.promptTokens;
+          usage.completionTokens += secondRun.usage.completionTokens;
+          usage.totalTokens += secondRun.usage.totalTokens;
+        }
       }
 
-      console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + finalText + "\n");
+      console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + finalText);
+      console.log(chalk.gray(`[Token Usage: ${usage.promptTokens} input / ${usage.completionTokens} output]\n`));
+      
       memory[activePersona].push({ role: "assistant", content: finalText });
 
     } catch (error: any) {
