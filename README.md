@@ -38,7 +38,7 @@ Persona-driven code analysis, Japanese TTS audio cues, 3D graph visualization, a
 ## 🚀 Installation
 
 ```bash
-npm install -g repo-elenalyse
+npm install -g elenalyse
 ```
 
 ---
