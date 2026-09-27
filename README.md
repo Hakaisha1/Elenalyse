@@ -21,6 +21,7 @@ Persona-driven code analysis, Japanese TTS audio cues, 3D graph visualization, a
 * **Floating 3D Mascot (`elenalyse float`):** A transparent, borderless desktop overlay powered by Tauri + Three.js that floats above your IDE without cluttering your workspace.
 * **Repository 3D Graph Mapping (`elenalyse viz`):** Extracts module dependencies (`import`/`export`) and renders them in an interactive 3D force graph.
 * **Agentic Terminal Tools:** Capable of analyzing bugs, editing code files precisely, and running automated tests (`npm test`, `eslint`) via Vercel AI SDK.
+* **Isolated Multi-Memory Handoff:** Each persona maintains its own isolated memory buffer. When switching personas, your last technical context is seamlessly handed off as a system note, preventing personality bleed while maintaining conversation flow.
 
 ---
 
@@ -60,6 +61,8 @@ Once inside, you can securely set your API keys and configure Elenalyse using in
 * `/model <name>` : Change the active LLM model.
 * `/provider <name>` : Change the AI provider (`google`, `openai`, `openrouter`, `local`).
 * `/help` : View all available commands.
+
+> **💡 Pro Tip - Memory Handoff:** When you switch personas using `/persona`, Elenalyse preserves the strict personality of the new character while automatically handing off the context of your last message. Ask ELI to explain a concept, then switch to REI to optimize the code!
 
 ### 2. Single Message Usage
 

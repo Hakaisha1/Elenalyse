@@ -122,7 +122,14 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
   printWelcome();
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  let chatHistory: any[] = [];
+  
+  // Multi-Memory System
+  let memory: Record<string, any[]> = {
+    eli: [],
+    rei: [],
+    sora: [],
+    rin: []
+  };
 
   while (true) {
     const input = await rl.question(chalk.green("👤 You ❯ "));
@@ -190,11 +197,24 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     }
 
     if (input.startsWith("/persona ")) {
-      const newPersona = input.split(" ")[1];
-      if (["eli", "rei", "sora", "rin"].includes(newPersona?.toLowerCase())) {
-        activePersona = newPersona.toLowerCase() as any;
+      const newPersona = input.split(" ")[1]?.toLowerCase();
+      if (newPersona && ["eli", "rei", "sora", "rin"].includes(newPersona)) {
+        // Context Handoff Logic
+        const currentHistory = memory[activePersona];
+        const lastUserMessage = currentHistory.slice().reverse().find(m => m.role === "user");
+        const oldPersona = activePersona;
+
+        activePersona = newPersona as any;
         config.activePersona = activePersona;
         setConfig(config);
+
+        if (lastUserMessage) {
+          memory[activePersona].push({
+            role: "user",
+            content: `[SYSTEM HANDOFF NOTE: You have just been swapped in to replace ${oldPersona.toUpperCase()}. The user's last context/message was: "${lastUserMessage.content}". Please continue the conversation seamlessly from here.]`
+          });
+        }
+
         console.log(chalk.gray(`[ℹ] Persona changed to ${activePersona.toUpperCase()}`));
       } else {
         console.log(chalk.red("Invalid persona! Use: eli, rei, sora, rin"));
@@ -202,7 +222,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
       continue;
     }
 
-    chatHistory.push({ role: "user", content: input });
+    memory[activePersona].push({ role: "user", content: input });
 
     const colorName = getPersonaColor(activePersona) as keyof typeof chalk;
     const colorFn = (chalk as any)[colorName] || chalk.white;
@@ -217,7 +237,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
       const { text, toolCalls, toolResults } = await generateText({
         model: aiModel,
         system: await getPersonaPrompt(activePersona, voiceEnabled),
-        messages: chatHistory,
+        messages: memory[activePersona],
         tools: {
           readFile: readFileTool,
           listDir: listDirTool,
@@ -236,7 +256,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
       
       if (!text && toolCalls && toolCalls.length > 0 && toolResults && toolResults.length > 0) {
         const toolSpinner = ora(`Evaluating ${toolCalls[0].toolName} results...`).start();
-        const evaluationMessages = [...chatHistory];
+        const evaluationMessages = [...memory[activePersona]];
         
         evaluationMessages.push({
           role: "user",
@@ -253,7 +273,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
       }
 
       console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + finalText + "\n");
-      chatHistory.push({ role: "assistant", content: finalText });
+      memory[activePersona].push({ role: "assistant", content: finalText });
 
     } catch (error: any) {
       spinner.stop();
