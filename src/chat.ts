@@ -124,10 +124,6 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   let chatHistory: any[] = [];
 
-  const updateSystemPrompt = () => {
-    return { role: "system" as const, content: getPersonaPrompt(activePersona) };
-  };
-
   while (true) {
     const input = await rl.question(chalk.green("👤 Anda ❯ "));
     if (!input.trim()) continue;
@@ -206,12 +202,6 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
       continue;
     }
 
-    if (chatHistory.length === 0) {
-      chatHistory.push(updateSystemPrompt());
-    } else {
-      chatHistory[0] = updateSystemPrompt();
-    }
-
     chatHistory.push({ role: "user", content: input });
 
     const colorName = getPersonaColor(activePersona) as keyof typeof chalk;
@@ -226,6 +216,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
 
       const { text, toolCalls, toolResults } = await generateText({
         model: aiModel,
+        system: getPersonaPrompt(activePersona),
         messages: chatHistory,
         tools: {
           readFile: readFileTool,
@@ -254,6 +245,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
 
         const secondRun = await generateText({
           model: aiModel,
+          system: getPersonaPrompt(activePersona),
           messages: evaluationMessages,
         });
         toolSpinner.stop();
