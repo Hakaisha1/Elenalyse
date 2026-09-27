@@ -69,8 +69,34 @@ export async function ensureEngineDownloaded(onProgress?: (msg: string) => void)
   const res = await fetch(assetUrl);
   if (!res.ok) throw new Error("Failed to download VOICEVOX engine");
   
-  const arrayBuffer = await res.arrayBuffer();
-  fs.writeFileSync(temp7zPath, Buffer.from(arrayBuffer));
+  const contentLengthStr = res.headers.get("content-length");
+  const contentLength = contentLengthStr ? parseInt(contentLengthStr, 10) : 0;
+  
+  const fileStream = fs.createWriteStream(temp7zPath);
+  
+  if (res.body) {
+    const reader = res.body.getReader();
+    let downloaded = 0;
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      downloaded += value.length;
+      fileStream.write(value);
+      
+      if (contentLength > 0) {
+        const percent = ((downloaded / contentLength) * 100).toFixed(1);
+        process.stdout.write(`\r\x1b[90m[Progress]\x1b[0m Downloading VOICEVOX: ${percent}% (${(downloaded / 1024 / 1024).toFixed(1)}MB / ${(contentLength / 1024 / 1024).toFixed(1)}MB)`);
+      } else {
+        process.stdout.write(`\r\x1b[90m[Progress]\x1b[0m Downloading VOICEVOX: ${(downloaded / 1024 / 1024).toFixed(1)}MB`);
+      }
+    }
+    fileStream.end();
+    process.stdout.write("\n");
+  } else {
+    throw new Error("Failed to read response body");
+  }
   
   onProgress?.("Extracting VOICEVOX ENGINE using 7z...");
   
