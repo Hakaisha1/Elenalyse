@@ -11,6 +11,7 @@ export interface Config {
   activePersona: Persona;
   provider: Provider;
   model: string;
+  apiKeys?: Record<string, string>;
 }
 
 const defaultConfig: Config = {

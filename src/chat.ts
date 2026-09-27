@@ -4,7 +4,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import chalk from "chalk";
 import ora from "ora";
-import { getConfig } from "./config.js";
+import { getConfig, setConfig } from "./config.js";
 import { getPersonaPrompt, getPersonaColor } from "./personas.js";
 import { readFileTool, listDirTool, createRunCommandTool } from "./tools.js";
 
@@ -22,30 +22,12 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
   
   const spinner = ora(`Elenalyse (${activePersona.toUpperCase()}) is thinking...`).start();
 
-  let aiClient;
-
   try {
-    if (provider === "openrouter") {
-      const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
-      if (!apiKey) throw new Error("OPENROUTER_API_KEY or OPENAI_API_KEY environment variable is not set.");
-      aiClient = createOpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey });
-    } else if (provider === "openai") {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) throw new Error("OPENAI_API_KEY environment variable is not set.");
-      aiClient = createOpenAI({ apiKey });
-    } else if (provider === "local") {
-      // Local provider assumes an OpenAI-compatible endpoint like LM Studio or Ollama
-      aiClient = createOpenAI({ baseURL: "http://localhost:11434/v1", apiKey: "local" });
-    } else if (provider === "google") {
-      const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
-      if (!apiKey) throw new Error("GEMINI_API_KEY environment variable is not set.");
-      aiClient = createGoogleGenerativeAI({ apiKey });
-    } else {
-      throw new Error(`Unknown AI provider configured: ${provider}`);
-    }
+    const config = getConfig();
+    const aiClientFactory = await getAiClient(provider, model, config);
 
     const { text, toolCalls, toolResults } = await generateText({
-      model: aiClient(model),
+      model: aiClientFactory,
       system: systemPrompt,
       prompt: message,
       tools: {
@@ -69,7 +51,7 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
       const evaluationPrompt = `${message}\n\n[System: You called the tool "${toolCalls[0].toolName}" and received this result:\n${JSON.stringify((toolResults[0] as any).result || (toolResults[0] as any).output || "Success", null, 2)}\n\nPlease provide your final answer to the user based on this data. Do not output JSON, speak naturally.]`;
 
       const secondRun = await generateText({
-        model: aiClient(model),
+        model: aiClientFactory,
         system: systemPrompt,
         prompt: evaluationPrompt,
       });
@@ -89,20 +71,30 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
   }
 }
 
-async function getAiClient(provider: string, model: string) {
+async function getAiClient(provider: string, model: string, config: any) {
+  const getApiKey = (envKeys: string[], configKey: string) => {
+    for (const key of envKeys) {
+      if (process.env[key]) return process.env[key];
+    }
+    if (config.apiKeys && config.apiKeys[configKey]) {
+      return config.apiKeys[configKey];
+    }
+    return undefined;
+  };
+
   if (provider === "openrouter") {
-    const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OPENROUTER_API_KEY environment variable is not set.");
+    const apiKey = getApiKey(["OPENROUTER_API_KEY", "OPENAI_API_KEY"], "openrouter");
+    if (!apiKey) throw new Error("API KEY for OpenRouter is not set. Use /api openrouter <key> to set it.");
     return createOpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey })(model);
   } else if (provider === "openai") {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OPENAI_API_KEY environment variable is not set.");
+    const apiKey = getApiKey(["OPENAI_API_KEY"], "openai");
+    if (!apiKey) throw new Error("API KEY for OpenAI is not set. Use /api openai <key> to set it.");
     return createOpenAI({ apiKey })(model);
   } else if (provider === "local") {
     return createOpenAI({ baseURL: "http://localhost:11434/v1", apiKey: "local" })(model);
   } else if (provider === "google") {
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY environment variable is not set.");
+    const apiKey = getApiKey(["GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY"], "google");
+    if (!apiKey) throw new Error("API KEY for Google is not set. Use /api google <key> to set it.");
     return createGoogleGenerativeAI({ apiKey })(model);
   }
   throw new Error(`Unknown AI provider configured: ${provider}`);
@@ -111,8 +103,8 @@ async function getAiClient(provider: string, model: string) {
 export async function startInteractiveChat(voiceEnabled: boolean) {
   let config = getConfig();
   let activePersona = config.activePersona;
-  const provider = config.provider;
-  const model = config.model;
+  let provider = config.provider;
+  let model = config.model;
   
   const printWelcome = () => {
     console.clear();
@@ -154,15 +146,59 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
       console.log(chalk.cyan("\nDaftar Perintah Tersedia:"));
       console.log(chalk.cyan("  /help           : Menampilkan menu bantuan ini"));
       console.log(chalk.cyan("  /persona <nama> : Mengganti persona (eli/rei/sora/rin)"));
+      console.log(chalk.cyan("  /model <nama>   : Mengganti model (contoh: gemini-3.5-flash-lite)"));
+      console.log(chalk.cyan("  /provider <nama>: Mengganti provider (google/openai/openrouter/local)"));
+      console.log(chalk.cyan("  /api <provider> <key> : Menyimpan API Key (contoh: /api google AIza...)"));
       console.log(chalk.cyan("  /clear          : Membersihkan layar"));
       console.log(chalk.cyan("  /exit           : Keluar dari aplikasi\n"));
       continue;
     }
 
+    if (input.startsWith("/api ")) {
+      const parts = input.split(" ");
+      const prov = parts[1];
+      const key = parts[2];
+      if (prov && key) {
+        config.apiKeys = config.apiKeys || {};
+        config.apiKeys[prov] = key;
+        setConfig(config);
+        console.log(chalk.gray(`[ℹ] API Key untuk ${prov} telah disimpan.`));
+      } else {
+        console.log(chalk.red("Format salah! Gunakan: /api <provider> <key>"));
+      }
+      continue;
+    }
+
+    if (input.startsWith("/model ")) {
+      const newModel = input.split(" ")[1];
+      if (newModel) {
+        model = newModel;
+        config.model = model;
+        setConfig(config);
+        console.log(chalk.gray(`[ℹ] Model diubah menjadi ${model}`));
+      }
+      continue;
+    }
+
+    if (input.startsWith("/provider ")) {
+      const newProvider = input.split(" ")[1];
+      if (["google", "openai", "openrouter", "local"].includes(newProvider?.toLowerCase())) {
+        provider = newProvider.toLowerCase() as any;
+        config.provider = provider;
+        setConfig(config);
+        console.log(chalk.gray(`[ℹ] Provider diubah menjadi ${provider}`));
+      } else {
+        console.log(chalk.red("Provider tidak valid! Gunakan: google, openai, openrouter, local"));
+      }
+      continue;
+    }
+
     if (input.startsWith("/persona ")) {
       const newPersona = input.split(" ")[1];
-      if (["eli", "rei", "sora", "rin"].includes(newPersona.toLowerCase())) {
+      if (["eli", "rei", "sora", "rin"].includes(newPersona?.toLowerCase())) {
         activePersona = newPersona.toLowerCase() as any;
+        config.activePersona = activePersona;
+        setConfig(config);
         console.log(chalk.gray(`[ℹ] Persona diubah menjadi ${activePersona.toUpperCase()}`));
       } else {
         console.log(chalk.red("Persona tidak valid! Gunakan: eli, rei, sora, rin"));
@@ -186,7 +222,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     rl.pause();
 
     try {
-      const aiModel = await getAiClient(provider, model);
+      const aiModel = await getAiClient(provider, model, config);
 
       const { text, toolCalls, toolResults } = await generateText({
         model: aiModel,
