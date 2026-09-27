@@ -8,7 +8,15 @@ import sevenBin from "7zip-bin";
 const ENGINE_DIR = path.join(os.homedir(), ".elenalyse", "voicevox-engine");
 
 function getEngineExecutablePath(): string {
-  // VoiceVox engine extraction usually creates a nested folder based on the OS.
+  if (os.platform() === "win32") {
+    // Dynamically check the official global installation path first
+    const officialInstallPath = path.join(os.homedir(), "AppData", "Local", "Programs", "VOICEVOX", "vv-engine", "run.exe");
+    if (fs.existsSync(officialInstallPath)) {
+      return officialInstallPath;
+    }
+  }
+
+  // Fallback to local downloaded engine inside ~/.elenalyse
   const winPath = path.join(ENGINE_DIR, "windows-directml-engine", "run.exe");
   const winCpuPath = path.join(ENGINE_DIR, "windows-cpu-engine", "run.exe");
   const macPath = path.join(ENGINE_DIR, "macos-cpu-engine", "run");
@@ -54,6 +62,12 @@ async function getReleaseAssetUrlForPlatform(): Promise<string> {
 }
 
 export async function ensureEngineDownloaded(onProgress?: (msg: string) => void): Promise<void> {
+  const existingExecPath = getEngineExecutablePath();
+  if (fs.existsSync(existingExecPath) && !existingExecPath.endsWith("voicevox-engine\\run.exe") && !existingExecPath.endsWith("voicevox-engine/run")) {
+    // If we found a valid executable (e.g. official path or properly nested downloaded path), skip download.
+    return;
+  }
+
   if (fs.existsSync(ENGINE_DIR) && fs.readdirSync(ENGINE_DIR).length > 0) {
     return;
   }
