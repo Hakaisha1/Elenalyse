@@ -279,7 +279,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
       spinner.stop();
       console.log(chalk.red("\n✖ Failed to get response from AI engine."));
       console.log(chalk.red(error.message));
-      chatHistory.pop(); // Revert user message so they can retry
+      memory[activePersona].pop(); // Revert user message so they can retry
     } finally {
       rl.resume();
     }
