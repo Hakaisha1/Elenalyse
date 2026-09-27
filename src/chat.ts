@@ -5,6 +5,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { getConfig } from "./config.js";
 import { getPersonaPrompt, getPersonaColor } from "./personas.js";
+import { readFileTool, listDirTool } from "./tools.js";
 
 export async function handleChat(message: string, voiceEnabled: boolean) {
   if (!message) {
@@ -42,14 +43,37 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
       throw new Error(`Unknown AI provider configured: ${provider}`);
     }
 
-    const { text } = await generateText({
+    const { text, toolCalls, toolResults } = await generateText({
       model: aiClient(model),
       system: systemPrompt,
       prompt: message,
+      tools: {
+        readFile: readFileTool,
+        listDir: listDirTool
+      },
+      // @ts-ignore
+      maxSteps: 5,
     });
 
     spinner.stop();
-    console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + text);
+    
+    // Robust manual loop for AI SDK version / Provider compatibility issues
+    if (!text && toolCalls && toolCalls.length > 0 && toolResults && toolResults.length > 0) {
+      const toolSpinner = ora(`Evaluating ${toolCalls[0].toolName} results...`).start();
+      
+      const evaluationPrompt = `${message}\n\n[System: You called the tool "${toolCalls[0].toolName}" and received this result:\n${JSON.stringify((toolResults[0] as any).result || (toolResults[0] as any).output || "Success", null, 2)}\n\nPlease provide your final answer to the user based on this data. Do not output JSON, speak naturally.]`;
+
+      const secondRun = await generateText({
+        model: aiClient(model),
+        system: systemPrompt,
+        prompt: evaluationPrompt,
+      });
+
+      toolSpinner.stop();
+      console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + secondRun.text);
+    } else {
+      console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + text);
+    }
 
     if (voiceEnabled) {
       console.log(chalk.magenta("\n[TTS Feature is currently mocked and not yet implemented]"));
