@@ -1,19 +1,34 @@
 {
   "name": "elenalyse",
-  "version": "1.0.0",
-  "description": "��#\u0000 \u0000E\u0000l\u0000e\u0000n\u0000a\u0000l\u0000y\u0000s\u0000e\u0000\r\u0000 \u0000",
-  "main": "index.js",
+  "version": "0.1.0",
+  "description": "Interactive CLI personal developer assistant",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "elenalyse": "./bin/elenalyse.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "defaults"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Hakaisha1/Elenalyse.git"
   },
-  "keywords": [],
+  "keywords": [
+    "cli",
+    "developer-assistant",
+    "ai",
+    "rag"
+  ],
   "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/Hakaisha1/Elenalyse/issues"
   },
