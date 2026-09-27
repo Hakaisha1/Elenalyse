@@ -130,6 +130,8 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     sora: [],
     rin: []
   };
+  
+  let pendingHandoffNote = "";
 
   while (true) {
     const input = await rl.question(chalk.green("👤 You ❯ "));
@@ -226,11 +228,8 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         config.activePersona = activePersona;
         setConfig(config);
 
-        if (handoffSummary) {
-          memory[activePersona].push({
-            role: "user",
-            content: `[SYSTEM HANDOFF NOTE: You have just replaced ${oldPersona.toUpperCase()}. The user's current working context is as follows:\n\n${handoffSummary}\n\nPlease smoothly resume assisting the user based on this context without explicitly mentioning this handoff note.]`
-          });
+        if (handoffSummary && !handoffSummary.startsWith("Error")) {
+          pendingHandoffNote = `[SYSTEM HANDOFF NOTE: You have just replaced ${oldPersona.toUpperCase()}. The user's current working context is as follows:\n\n${handoffSummary}\n\nPlease smoothly resume assisting the user based on this context without explicitly mentioning this handoff note.]`;
         }
 
         console.log(chalk.gray(`[ℹ] Persona changed to ${activePersona.toUpperCase()}`));
@@ -242,7 +241,13 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
       continue;
     }
 
-    memory[activePersona].push({ role: "user", content: input });
+    let finalInput = input;
+    if (pendingHandoffNote) {
+      finalInput = `${pendingHandoffNote}\n\nUser Message: ${input}`;
+      pendingHandoffNote = "";
+    }
+
+    memory[activePersona].push({ role: "user", content: finalInput });
 
     const colorName = getPersonaColor(activePersona) as keyof typeof chalk;
     const colorFn = (chalk as any)[colorName] || chalk.white;
