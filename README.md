@@ -90,13 +90,22 @@ To enable Voice Mode, start the interactive chat with the `--voice` flag:
 ```bash
 elenalyse start --voice
 ```
-_Note: On your first run, Elenalyse will automatically download and extract the local VOICEVOX Engine binary for your OS in the background (approx. 100MB-300MB). No Docker or external setup is required!_
+
+### Installation Guide
+While Elenalyse can attempt to automatically download the engine via terminal, the GitHub release size is massive (~1.7GB) and may take a long time. 
+**We highly recommend installing the official VOICEVOX Editor:**
+1. Download the Installer from the [VOICEVOX Official Website](https://voicevox.hiroshiba.jp/).
+2. Run the installer and launch the application.
+3. Elenalyse will automatically detect your local installation (e.g. `AppData/Local/Programs/VOICEVOX`) or the active `50021` port and connect to it instantly!
 
 ### Attribution (Important)
 If you record or share the voice output of Elenalyse publicly (e.g., YouTube, Twitch, Twitter), you **must** credit the VOICEVOX characters used according to their terms of service. For example:
 - **VOICEVOX:ずんだもん** (Zundamon)
 - **VOICEVOX:四国めたん** (Shikoku Metan)
 - **VOICEVOX:春日部つむぎ** (Kasukabe Tsumugi)
+- **VOICEVOX:No.7**
+
+
 
 Please review the [VOICEVOX Terms of Use](https://voicevox.hiroshiba.jp/term/) for full details before publishing audio.
 
