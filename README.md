@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/elenalyse.png" alt="Elenalyse Logo" width="300" />
+  <img src="assets/elenalyse.png" alt="Elenalyse Logo" width="600" />
 </div>
 
 # Elenalyse
