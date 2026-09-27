@@ -198,24 +198,43 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
 
     if (input.startsWith("/persona ")) {
       const newPersona = input.split(" ")[1]?.toLowerCase();
-      if (newPersona && ["eli", "rei", "sora", "rin"].includes(newPersona)) {
-        // Context Handoff Logic
+      if (newPersona && ["eli", "rei", "sora", "rin"].includes(newPersona) && newPersona !== activePersona) {
+        // LLM Context Handoff Logic
         const currentHistory = memory[activePersona];
-        const lastUserMessage = currentHistory.slice().reverse().find(m => m.role === "user");
         const oldPersona = activePersona;
+        
+        let handoffSummary = "";
+
+        if (currentHistory.length > 0) {
+          const handoffSpinner = ora(`Synthesizing context for ${newPersona.toUpperCase()}...`).start();
+          try {
+            const aiModel = await getAiClient(provider, model, config);
+            const summaryRun = await generateText({
+              model: aiModel,
+              system: "You are a senior developer handing off a shift to a colleague. Read the provided conversation history and write a highly concise, purely technical summary of the user's current situation. What file are they working on? What is the exact bug or feature goal? Do not include greetings or fluff. Use bullet points.",
+              messages: currentHistory
+            });
+            handoffSummary = summaryRun.text;
+          } catch (e) {
+            handoffSummary = "Error: Failed to synthesize context.";
+          }
+          handoffSpinner.stop();
+        }
 
         activePersona = newPersona as any;
         config.activePersona = activePersona;
         setConfig(config);
 
-        if (lastUserMessage) {
+        if (handoffSummary) {
           memory[activePersona].push({
             role: "user",
-            content: `[SYSTEM HANDOFF NOTE: You have just been swapped in to replace ${oldPersona.toUpperCase()}. The user's last context/message was: "${lastUserMessage.content}". Please continue the conversation seamlessly from here.]`
+            content: `[SYSTEM HANDOFF NOTE: You have just replaced ${oldPersona.toUpperCase()}. The user's current working context is as follows:\n\n${handoffSummary}\n\nPlease smoothly resume assisting the user based on this context without explicitly mentioning this handoff note.]`
           });
         }
 
         console.log(chalk.gray(`[ℹ] Persona changed to ${activePersona.toUpperCase()}`));
+      } else if (newPersona === activePersona) {
+        console.log(chalk.gray(`[ℹ] Persona is already ${activePersona.toUpperCase()}`));
       } else {
         console.log(chalk.red("Invalid persona! Use: eli, rei, sora, rin"));
       }
