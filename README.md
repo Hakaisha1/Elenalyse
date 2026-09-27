@@ -45,25 +45,32 @@ npm install -g elenalyse
 
 ## ⚡ Quick Start
 
-### 1. Setup API Keys
+### 1. Launch Interactive Chat (REPL)
 
-Set your LLM provider API key in your environment variables or `~/.elenalyserc` config file:
+The best way to use Elenalyse is through the interactive chat loop. This mode remembers your conversation history!
 
 ```bash
-export OPENAI_API_KEY="sk-..."
+elenalyse start
 ```
 
-### 2. CLI Basic Usage
+Once inside, you can securely set your API keys and configure Elenalyse using in-chat commands:
+
+* `/api <provider> <key>` : Save your API key permanently (e.g., `/api google AIza...`)
+* `/persona <name>` : Switch between `eli`, `rei`, `sora`, `rin`.
+* `/model <name>` : Change the active LLM model.
+* `/provider <name>` : Change the AI provider (`google`, `openai`, `openrouter`, `local`).
+* `/help` : View all available commands.
+
+### 2. Single Message Usage
+
+If you prefer one-off commands for scripting or quick tasks:
 
 ```bash
-# Instant chat with the active persona (default: ELI)
-elenalyse chat "How do I refactor this auth function?"
+# Send a single message and exit
+elenalyse chat "Please create a new React component called Button"
 
-# Switch active persona to RIN (Strict Auditor)
+# Switch active persona globally via CLI
 elenalyse persona set rin
-
-# Request a code audit with Japanese TTS voice response
-elenalyse chat --voice "Please check for bugs in src/index.ts"
 
 # Open interactive 3D module visualization in your browser
 elenalyse viz
