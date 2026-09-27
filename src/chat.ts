@@ -123,10 +123,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     console.log(chalk.gray(`[ℹ] Model    : ${model}`));
     console.log(chalk.gray(`[ℹ] Persona  : ${activePersona.toUpperCase()}`));
     console.log(chalk.gray("---------------------------------------------------"));
-    console.log(chalk.cyan("Ketik pesan Anda di bawah ini. Gunakan perintah:"));
-    console.log(chalk.cyan("  /persona <nama> : Mengganti persona (eli/rei/sora/rin)"));
-    console.log(chalk.cyan("  /clear          : Membersihkan layar"));
-    console.log(chalk.cyan("  /exit           : Keluar dari aplikasi"));
+    console.log(chalk.cyan("Ketik pesan Anda di bawah ini. Ketik '/help' untuk melihat daftar perintah."));
     console.log(chalk.magenta("===================================================\n"));
   };
 
@@ -150,6 +147,15 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
 
     if (input.startsWith("/clear")) {
       printWelcome();
+      continue;
+    }
+
+    if (input.startsWith("/help")) {
+      console.log(chalk.cyan("\nDaftar Perintah Tersedia:"));
+      console.log(chalk.cyan("  /help           : Menampilkan menu bantuan ini"));
+      console.log(chalk.cyan("  /persona <nama> : Mengganti persona (eli/rei/sora/rin)"));
+      console.log(chalk.cyan("  /clear          : Membersihkan layar"));
+      console.log(chalk.cyan("  /exit           : Keluar dari aplikasi\n"));
       continue;
     }
 
