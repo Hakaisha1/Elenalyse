@@ -237,7 +237,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
     let finalInput = input;
     if (handoffPromise) {
       const spinner = ora(`Waiting for context handoff to complete...`).start();
-      const handoffSummary = await handoffPromise;
+      const handoffSummary = (await handoffPromise) as string;
       spinner.stop();
       handoffPromise = null;
       
