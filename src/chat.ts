@@ -203,7 +203,6 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
     rin: []
   };
   
-  let handoffPromise: Promise<string> | null = null;
   let oldPersonaNameForHandoff = "";
 
   while (true) {
@@ -274,30 +273,24 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
     if (input.startsWith("/persona ")) {
       const newPersona = input.split(" ")[1]?.toLowerCase();
       if (newPersona && ["eli", "rei", "sora", "rin"].includes(newPersona) && newPersona !== activePersona) {
-        // Asynchronous Background Handoff Synthesis
+        // Fast Synchronous Handoff: copy last 6 messages (3 turns)
         const currentHistory = memory[activePersona];
         oldPersonaNameForHandoff = activePersona;
-
-        if (currentHistory.length > 0) {
-          handoffPromise = getAiClient(provider, model, config).then(aiModel => {
-            const evaluationMessages = [...currentHistory];
-            evaluationMessages.push({
-              role: "user",
-              content: "[System Instruction]: You are a senior developer handing off a shift to a colleague. Read our conversation history above and write a highly concise, purely technical summary of my current situation. What file am I working on? What is the exact bug or feature goal? Do not include greetings or fluff. Use bullet points."
-            });
-            
-            return generateText({
-              model: aiModel,
-              messages: evaluationMessages
-            }).then(res => res.text);
-          }).catch(e => "Error: Failed to synthesize context. " + e.message);
-        }
 
         activePersona = newPersona as any;
         config.activePersona = activePersona;
         setConfig(config);
 
-        console.log(chalk.gray(`[ℹ] Persona changed to ${activePersona.toUpperCase()} (Synthesizing context in background...)`));
+        if (currentHistory.length > 0) {
+          const recentHistory = currentHistory.slice(-6);
+          memory[activePersona].push(
+            { role: "user", content: `[SYSTEM HANDOFF NOTE] You are taking over from ${oldPersonaNameForHandoff.toUpperCase()}. Here is the recent conversation history to give you context.` },
+            { role: "assistant", content: "Understood. I will resume the conversation from here based on my own persona traits." },
+            ...recentHistory
+          );
+        }
+
+        console.log(chalk.gray(`[ℹ] Persona changed to ${activePersona.toUpperCase()}`));
       } else if (newPersona === activePersona) {
         console.log(chalk.gray(`[ℹ] Persona is already ${activePersona.toUpperCase()}`));
       } else {
@@ -307,17 +300,6 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
     }
 
     let finalInput = input;
-    if (handoffPromise) {
-      const spinner = ora(`Waiting for context handoff to complete...`).start();
-      const handoffSummary = (await handoffPromise) as string;
-      spinner.stop();
-      handoffPromise = null;
-      
-      if (handoffSummary && !handoffSummary.startsWith("Error")) {
-        const pendingHandoffNote = `[SYSTEM HANDOFF NOTE: You have just replaced ${oldPersonaNameForHandoff.toUpperCase()}. The user's current working context is as follows:\n\n${handoffSummary}\n\nPlease smoothly resume assisting the user based on this context without explicitly mentioning this handoff note.]`;
-        finalInput = `${pendingHandoffNote}\n\nUser Message: ${input}`;
-      }
-    }
 
     memory[activePersona].push({ role: "user", content: finalInput });
 
