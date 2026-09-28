@@ -341,6 +341,16 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
         // @ts-ignore
         maxSteps: 5,
         onStepFinish: (event) => {
+          if (debug) {
+            console.log(chalk.gray(`\n[DEBUG] Step completed. Reason: ${event.finishReason}`));
+            if (event.text) console.log(chalk.gray(`[DEBUG] Text generated so far: ${event.text.length} chars`));
+            if (event.toolCalls && event.toolCalls.length > 0) {
+              event.toolCalls.forEach(tc => {
+                 console.log(chalk.magenta(`[DEBUG] AI called tool: ${tc.toolName}`));
+                 console.log(chalk.gray(`[DEBUG] Args: ${JSON.stringify((tc as any).args)}`));
+              });
+            }
+          }
           if (event.toolCalls && event.toolCalls.length > 0) {
             const currentToolCallsStr = JSON.stringify(event.toolCalls.map(tc => ({ name: tc.toolName, args: (tc as any).args })));
             if (currentToolCallsStr === previousToolCallsStr) {
