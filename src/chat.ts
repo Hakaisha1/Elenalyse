@@ -313,7 +313,9 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
     try {
       const aiModel = await getAiClient(provider, model, config);
 
-      const { text, toolCalls, toolResults, usage, response } = await generateText({
+      let previousToolCallsStr = "";
+
+      const { text, toolCalls, toolResults, usage, response, steps } = await generateText({
         model: aiModel,
         system: await getPersonaPrompt(activePersona, voiceEnabled),
         messages: memory[activePersona],
@@ -338,7 +340,20 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
         },
         // @ts-ignore
         maxSteps: 5,
+        onStepFinish: (event) => {
+          if (event.toolCalls && event.toolCalls.length > 0) {
+            const currentToolCallsStr = JSON.stringify(event.toolCalls.map(tc => ({ name: tc.toolName, args: (tc as any).args })));
+            if (currentToolCallsStr === previousToolCallsStr) {
+              console.log(chalk.red(`\n[ERROR] Agent Loop Detected! Repeated identical tool call: ${event.toolCalls[0].toolName}`));
+            }
+            previousToolCallsStr = currentToolCallsStr;
+          }
+        }
       });
+
+      if (steps && steps.length >= 5) {
+        console.log(chalk.yellow(`\n[WARNING] Max steps (5) reached. The AI was forcefully stopped.`));
+      }
 
       spinner.stop();
 

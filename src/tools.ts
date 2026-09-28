@@ -57,11 +57,17 @@ export const listDirTool = tool({
   },
 });
 
-export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner: () => void, rlInterface?: any) => tool({
-  description: "Execute a terminal/shell command on the user's system. IMPORTANT: The user is on a WINDOWS system. You MUST use Windows PowerShell/CMD syntax (e.g., use 'del' instead of 'rm', 'mkdir' without '-p', 'type nul > file.txt' instead of 'touch', and 'dir' instead of 'ls').",
-  parameters: z.object({
-    command: z.string().describe("The bash/powershell command to execute"),
-  }),
+export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner: () => void, rlInterface?: any) => {
+  const isWindows = process.platform === "win32";
+  const osContext = isWindows 
+    ? "IMPORTANT: The user is on a WINDOWS system. You MUST use Windows PowerShell/CMD syntax (e.g., use 'del' instead of 'rm', 'type nul > file.txt' instead of 'touch', and 'dir' instead of 'ls')."
+    : `IMPORTANT: The user is on a POSIX/UNIX system (${process.platform}). You MUST use standard bash/unix syntax.`;
+    
+  return tool({
+    description: `Execute a terminal/shell command on the user's system. ${osContext}`,
+    parameters: z.object({
+      command: z.string().describe("The command to execute"),
+    }),
   // @ts-ignore
   execute: async ({ command }: { command: string }) => {
     onPauseSpinner();
@@ -91,10 +97,11 @@ export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner
       const { stdout, stderr } = await execAsync(command, { cwd: process.cwd() });
       return `STDOUT:\n${stdout}\nSTDERR:\n${stderr}`;
     } catch (err: any) {
-      return `Error executing command: ${err.message}`;
+      return `Error executing command: ${err.message}\nIf this is a syntax error, remember you are on ${process.platform}. Use appropriate shell commands.`;
     }
   }
 });
+};
 
 export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner: () => void, rlInterface?: any) => tool({
   description: "Create a new file or completely overwrite an existing file with new content. YOU MUST USE THIS TOOL TO CREATE FILES INSTEAD OF OUTPUTTING CODE BLOCKS.",
@@ -200,7 +207,7 @@ export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: 
       const content = await fs.readFile(absolutePath, "utf-8");
       
       if (!content.includes(targetText)) {
-        return "Error: The targetText was not found in the file. Make sure you included the exact indentation and whitespace.";
+        return `Error: The targetText was not found in the file. Make sure you included the exact indentation and whitespace. Remember that the targetText must be an EXACT substring match of the file's current content.`;
       }
       
       const newContent = content.replace(targetText, replacementText);
