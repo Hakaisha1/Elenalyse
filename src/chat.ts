@@ -347,28 +347,27 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         const toolSpinner = ora(`Evaluating ${toolCalls[0].toolName} results...`).start();
         const evaluationMessages = [...memory[activePersona]];
         
-        const assistantContent = toolCalls.map(tc => ({
-          type: "tool-call" as const,
-          toolCallId: tc.toolCallId,
-          toolName: tc.toolName,
-          args: (tc as any).args
-        }));
+        if (response && response.messages) {
+          evaluationMessages.push(...response.messages);
+        } else {
+          // Fallback if response.messages is not available for some reason
+          const assistantContent = toolCalls.map(tc => ({
+            type: "tool-call" as const,
+            toolCallId: tc.toolCallId,
+            toolName: tc.toolName,
+            args: (tc as any).args
+          }));
 
-        const toolContent = toolResults.map(tr => ({
-          type: "tool-result" as const,
-          toolCallId: tr.toolCallId,
-          toolName: tr.toolName,
-          result: (tr as any).result || (tr as any).output || "Success"
-        }));
+          const toolContent = toolResults.map(tr => ({
+            type: "tool-result" as const,
+            toolCallId: tr.toolCallId,
+            toolName: tr.toolName,
+            result: (tr as any).result || (tr as any).output || "Success"
+          }));
 
-        // Push valid Vercel AI SDK CoreMessage schemas
-        evaluationMessages.push({ role: "assistant", content: assistantContent });
-        evaluationMessages.push({ role: "tool", content: toolContent });
-        
-        evaluationMessages.push({
-          role: "user",
-          content: `[System: The tool execution is complete. Please provide your final answer to the user based on the tool results. Speak naturally.]`
-        });
+          evaluationMessages.push({ role: "assistant", content: assistantContent });
+          evaluationMessages.push({ role: "tool", content: toolContent });
+        }
 
         const secondRun = await generateText({
           model: aiModel,
@@ -383,9 +382,9 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
           (usage as any).completionTokens += (secondRun.usage as any).completionTokens || 0;
         }
 
-        // Push manual history using valid schema
-        memory[activePersona].push({ role: "assistant", content: assistantContent });
-        memory[activePersona].push({ role: "tool", content: toolContent });
+        if (response && response.messages) {
+          memory[activePersona].push(...response.messages);
+        }
         memory[activePersona].push({ role: "assistant", content: finalText });
       } else {
         // AI SDK handled it natively with maxSteps, push the full response history

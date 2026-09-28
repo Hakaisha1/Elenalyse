@@ -66,6 +66,6 @@ export function getPersonaColor(persona: Persona): string {
 export const PERSONA_SPEAKER_MAP: Record<Persona, number> = {
   eli: 2,   // Shikoku Metan (Normal) - Friendly, warm, patient assistant.
   rei: 14,  // Kasukabe Tsumugi (Normal) - Calm, cold, highly efficient (Kuudere).
-  sora: 29,  // Zundamon (Normal) - Cheerful, energetic, creative (Deredere).
+  sora: 29,  // No.7 - Cheerful, energetic, creative (Deredere).
   rin: 7,   // Zundamon (Tsundere) - Strict, harsh, but helpful (Tsundere).
 };
