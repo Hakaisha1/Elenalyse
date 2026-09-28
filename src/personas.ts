@@ -35,7 +35,7 @@ export async function getPersonaPrompt(persona: Persona, voiceEnabled: boolean =
   if (fs.existsSync(personaSkillDir)) {
     const files = fs.readdirSync(personaSkillDir);
     for (const file of files) {
-      if (file.endsWith(".md")) {
+      if (file.endsWith(".md") && file !== "voice.md") {
         const content = fs.readFileSync(path.join(personaSkillDir, file), "utf-8");
         additionalSkills += `\n\n[PERSONA SKILL: ${file}]\n${content}\n`;
       }
@@ -45,6 +45,12 @@ export async function getPersonaPrompt(persona: Persona, voiceEnabled: boolean =
   let voiceInstruction = "";
   if (voiceEnabled) {
     voiceInstruction = "\n\n[SYSTEM DIRECTIVE: VOICE MODE IS ENABLED. You MUST use the <voice>...</voice> tag for your emotional/persona reactions. CRITICAL: The text inside <voice> tags MUST be written entirely in Japanese (Kanji/Hiragana/Katakana) because it is fed to a Japanese TTS engine. The content inside the voice tags will be hidden from the UI, so ensure any critical technical information or English explanations are placed OUTSIDE the voice tags in standard markdown.]\n";
+    
+    const voiceSkillPath = path.join(personaSkillDir, "voice.md");
+    if (fs.existsSync(voiceSkillPath)) {
+      const voiceContent = fs.readFileSync(voiceSkillPath, "utf-8");
+      voiceInstruction += `\n[VOICE GUIDELINES]\n${voiceContent}\n`;
+    }
   } else {
     voiceInstruction = "\n\n[SYSTEM DIRECTIVE: VOICE MODE IS DISABLED. Do NOT output <voice> tags under any circumstances. Ignore any instructions in your skills that tell you to use <voice> tags. Provide normal markdown text only.]\n";
   }
