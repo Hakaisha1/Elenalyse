@@ -27,7 +27,10 @@ export async function getPersonaPrompt(persona: Persona, voiceEnabled: boolean =
 
   // 1. Load global.md
   if (fs.existsSync(globalSkillPath)) {
-    const content = fs.readFileSync(globalSkillPath, "utf-8");
+    let content = fs.readFileSync(globalSkillPath, "utf-8");
+    if (!voiceEnabled) {
+      content = content.replace(/<!--\s*voice:start\s*-->[\s\S]*?<!--\s*voice:end\s*-->/gi, "");
+    }
     additionalSkills += `\n\n[GLOBAL SKILLS]\n${content}\n`;
   }
 
@@ -36,7 +39,11 @@ export async function getPersonaPrompt(persona: Persona, voiceEnabled: boolean =
     const files = fs.readdirSync(personaSkillDir);
     for (const file of files) {
       if (file.endsWith(".md") && file !== "voice.md") {
-        const content = fs.readFileSync(path.join(personaSkillDir, file), "utf-8");
+        let content = fs.readFileSync(path.join(personaSkillDir, file), "utf-8");
+        if (!voiceEnabled) {
+          // Remove <!-- voice:start --> to <!-- voice:end --> blocks and their contents
+          content = content.replace(/<!--\s*voice:start\s*-->[\s\S]*?<!--\s*voice:end\s*-->/gi, "");
+        }
         additionalSkills += `\n\n[PERSONA SKILL: ${file}]\n${content}\n`;
       }
     }
