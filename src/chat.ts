@@ -14,11 +14,12 @@ import { readFileTool, listDirTool, createRunCommandTool, createWriteFileTool, c
 import { ensureEngineDownloaded, ensureEngineRunning } from "./voiceEngine.js";
 import { synthesizeSpeech } from "./tts.js";
 
-function extractVoiceSegments(responseText: string): { displayText: string; voiceLines: string[] } {
+function extractVoiceSegments(responseText: string, debug: boolean = false): { displayText: string; voiceLines: string[] } {
+  if (!responseText) return { displayText: "", voiceLines: [] };
   const voiceLines: string[] = [];
   const displayText = responseText.replace(/<voice>([\s\S]*?)<\/voice>/g, (_, content) => {
     voiceLines.push(content.trim());
-    return ""; // Hide the voice text from the terminal
+    return debug ? chalk.magenta(`\n[VOICE: ${content.trim()}]\n`) : ""; // Hide the voice text from the terminal unless debug is true
   });
   return { displayText: displayText.trim(), voiceLines };
 }
@@ -37,7 +38,7 @@ async function playVoiceLines(voiceLines: string[], speakerId: number) {
   }
 }
 
-export async function handleChat(message: string, voiceEnabled: boolean) {
+export async function handleChat(message: string, voiceEnabled: boolean, debug: boolean = false) {
   if (!message) {
     console.log(chalk.red("Error: Message is required."));
     process.exit(1);
@@ -106,7 +107,7 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
     console.log(chalk.gray(`\n[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]`));
 
     if (voiceEnabled) {
-      let { displayText, voiceLines } = extractVoiceSegments(text);
+      let { displayText, voiceLines } = extractVoiceSegments(text, debug);
       if (voiceLines.length > 0) {
         const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
         playVoiceLines(voiceLines, speakerId);
@@ -147,7 +148,7 @@ async function getAiClient(provider: string, model: string, config: any) {
   throw new Error(`Unknown AI provider configured: ${provider}`);
 }
 
-export async function startInteractiveChat(voiceEnabled: boolean) {
+export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean = false) {
   let config = getConfig();
   let activePersona = config.activePersona;
   let provider = config.provider;
@@ -413,7 +414,7 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         }
       }
 
-      let { displayText, voiceLines } = extractVoiceSegments(finalText);
+      let { displayText, voiceLines } = extractVoiceSegments(finalText, debug);
       console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + displayText);
       console.log(chalk.gray(`[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]\n`));
 

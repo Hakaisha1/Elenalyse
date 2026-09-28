@@ -15,8 +15,9 @@ program
   .command("start")
   .description("Start the interactive Elenalyse REPL chat")
   .option("-v, --voice", "Enable TTS voice response")
+  .option("-d, --debug", "Show hidden voice tags in CLI for debugging")
   .action(async (options) => {
-    await startInteractiveChat(options.voice);
+    await startInteractiveChat(options.voice, options.debug);
   });
 
 program
@@ -24,11 +25,12 @@ program
   .description("Send a single message to the active persona")
   .argument("[message]", "The message to send to the assistant")
   .option("-v, --voice", "Enable TTS voice response")
+  .option("-d, --debug", "Show hidden voice tags in CLI for debugging")
   .action(async (message, options) => {
     if (message) {
-      await handleChat(message, options.voice);
+      await handleChat(message, options.voice, options.debug);
     } else {
-      await startInteractiveChat(options.voice);
+      await startInteractiveChat(options.voice, options.debug);
     }
   });
 
