@@ -96,14 +96,36 @@ export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner
   }
 });
 
-export const writeFileTool = tool({
-  description: "Create a new file or completely overwrite an existing file with new content.",
+export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner: () => void, rlInterface?: any) => tool({
+  description: "Create a new file or completely overwrite an existing file with new content. YOU MUST USE THIS TOOL TO CREATE FILES INSTEAD OF OUTPUTTING CODE BLOCKS.",
   parameters: z.object({
     filePath: z.string().describe("The relative path to the file, e.g., 'src/utils.ts'"),
     content: z.string().describe("The complete content to write to the file"),
   }),
   // @ts-ignore
   execute: async ({ filePath, content }: { filePath?: string, content?: string }) => {
+    onPauseSpinner();
+    let answer = "n";
+    try {
+      console.log(""); 
+      const promptText = chalk.yellow(`⚠️  Elenalyse is requesting to WRITE file: ${chalk.bold(filePath)}\nAllow execution? [Y/n]: `);
+      if (rlInterface) {
+        rlInterface.resume();
+        answer = await rlInterface.question(promptText);
+        rlInterface.pause();
+      } else {
+        const tempRl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        answer = await tempRl.question(promptText);
+        tempRl.close();
+      }
+    } finally {
+      onResumeSpinner();
+    }
+
+    if (answer.toLowerCase() !== 'y') {
+      return "File write denied by the user.";
+    }
+
     try {
       if (!filePath || content === undefined) return "Error: filePath and content arguments are required.";
       const absolutePath = path.resolve(process.cwd(), filePath);
@@ -122,8 +144,8 @@ export const writeFileTool = tool({
   }
 });
 
-export const editFileTool = tool({
-  description: "Edit an existing file by replacing a specific block of text with new text. You MUST provide the EXACT target text to be replaced (including exact indentation and whitespace).",
+export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: () => void, rlInterface?: any) => tool({
+  description: "Edit an existing file by replacing a specific block of text with new text. YOU MUST USE THIS TOOL TO EDIT FILES INSTEAD OF OUTPUTTING CODE BLOCKS.",
   parameters: z.object({
     filePath: z.string().describe("The relative path to the file, e.g., 'src/index.ts'"),
     targetText: z.string().describe("The exact text in the file you want to replace. Must match exactly."),
@@ -131,6 +153,28 @@ export const editFileTool = tool({
   }),
   // @ts-ignore
   execute: async ({ filePath, targetText, replacementText }: { filePath?: string, targetText?: string, replacementText?: string }) => {
+    onPauseSpinner();
+    let answer = "n";
+    try {
+      console.log(""); 
+      const promptText = chalk.yellow(`⚠️  Elenalyse is requesting to EDIT file: ${chalk.bold(filePath)}\nAllow execution? [Y/n]: `);
+      if (rlInterface) {
+        rlInterface.resume();
+        answer = await rlInterface.question(promptText);
+        rlInterface.pause();
+      } else {
+        const tempRl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        answer = await tempRl.question(promptText);
+        tempRl.close();
+      }
+    } finally {
+      onResumeSpinner();
+    }
+
+    if (answer.toLowerCase() !== 'y') {
+      return "File edit denied by the user.";
+    }
+
     try {
       if (!filePath || !targetText || replacementText === undefined) return "Error: filePath, targetText, and replacementText arguments are required.";
       const absolutePath = path.resolve(process.cwd(), filePath);

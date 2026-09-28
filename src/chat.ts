@@ -10,7 +10,7 @@ import path from "path";
 import sound from "sound-play";
 import { getConfig, setConfig } from "./config.js";
 import { getPersonaPrompt, getPersonaColor, PERSONA_SPEAKER_MAP } from "./personas.js";
-import { readFileTool, listDirTool, createRunCommandTool, writeFileTool, editFileTool } from "./tools.js";
+import { readFileTool, listDirTool, createRunCommandTool, createWriteFileTool, createEditFileTool } from "./tools.js";
 import { ensureEngineDownloaded, ensureEngineRunning } from "./voiceEngine.js";
 import { synthesizeSpeech } from "./tts.js";
 
@@ -62,8 +62,14 @@ export async function handleChat(message: string, voiceEnabled: boolean) {
       tools: {
         readFile: readFileTool,
         listDir: listDirTool,
-        writeFile: writeFileTool,
-        editFile: editFileTool,
+        writeFile: createWriteFileTool(
+          () => spinner.stop(),
+          () => spinner.start()
+        ),
+        editFile: createEditFileTool(
+          () => spinner.stop(),
+          () => spinner.start()
+        ),
         runCommand: createRunCommandTool(
           () => spinner.stop(),
           () => spinner.start()
@@ -331,8 +337,16 @@ export async function startInteractiveChat(voiceEnabled: boolean) {
         tools: {
           readFile: readFileTool,
           listDir: listDirTool,
-          writeFile: writeFileTool,
-          editFile: editFileTool,
+          writeFile: createWriteFileTool(
+            () => spinner.stop(),
+            () => spinner.start(),
+            rl
+          ),
+          editFile: createEditFileTool(
+            () => spinner.stop(),
+            () => spinner.start(),
+            rl
+          ),
           runCommand: createRunCommandTool(
             () => spinner.stop(),
             () => spinner.start(),

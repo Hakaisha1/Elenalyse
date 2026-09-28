@@ -16,6 +16,7 @@ export const personas: Record<Persona, string> = {
 
 export async function getPersonaPrompt(persona: Persona, voiceEnabled: boolean = false): Promise<string> {
   let basePrompt = personas[persona] || personas.eli;
+  basePrompt += "\n\n[SYSTEM DIRECTIVE: TOOL USAGE]\nIf the user asks you to create, write, or generate a file, you MUST ALWAYS use the `writeFile` tool to do it instead of outputting markdown code blocks in chat. If the user asks you to edit or modify a file, you MUST ALWAYS use the `editFile` tool. Outputting code blocks without using these tools when explicitly asked to write a file is STRICTLY PROHIBITED.";
 
   // Calculate the root of the elenalyse package (parent of 'dist')
   const packageRoot = path.join(__dirname, "..");
