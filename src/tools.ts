@@ -95,3 +95,63 @@ export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner
     }
   }
 });
+
+export const writeFileTool = tool({
+  description: "Create a new file or completely overwrite an existing file with new content.",
+  parameters: z.object({
+    filePath: z.string().describe("The relative path to the file, e.g., 'src/utils.ts'"),
+    content: z.string().describe("The complete content to write to the file"),
+  }),
+  // @ts-ignore
+  execute: async ({ filePath, content }: { filePath?: string, content?: string }) => {
+    try {
+      if (!filePath || content === undefined) return "Error: filePath and content arguments are required.";
+      const absolutePath = path.resolve(process.cwd(), filePath);
+      
+      const relative = path.relative(process.cwd(), absolutePath);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        return "Error: Path traversal detected. Access denied.";
+      }
+
+      await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+      await fs.writeFile(absolutePath, content, "utf-8");
+      return `File successfully written to ${filePath}`;
+    } catch (error: any) {
+      return `Error writing file: ${error.message}`;
+    }
+  }
+});
+
+export const editFileTool = tool({
+  description: "Edit an existing file by replacing a specific block of text with new text. You MUST provide the EXACT target text to be replaced (including exact indentation and whitespace).",
+  parameters: z.object({
+    filePath: z.string().describe("The relative path to the file, e.g., 'src/index.ts'"),
+    targetText: z.string().describe("The exact text in the file you want to replace. Must match exactly."),
+    replacementText: z.string().describe("The new text to replace the target text with."),
+  }),
+  // @ts-ignore
+  execute: async ({ filePath, targetText, replacementText }: { filePath?: string, targetText?: string, replacementText?: string }) => {
+    try {
+      if (!filePath || !targetText || replacementText === undefined) return "Error: filePath, targetText, and replacementText arguments are required.";
+      const absolutePath = path.resolve(process.cwd(), filePath);
+      
+      const relative = path.relative(process.cwd(), absolutePath);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        return "Error: Path traversal detected. Access denied.";
+      }
+
+      const content = await fs.readFile(absolutePath, "utf-8");
+      
+      if (!content.includes(targetText)) {
+        return "Error: The targetText was not found in the file. Make sure you included the exact indentation and whitespace.";
+      }
+      
+      const newContent = content.replace(targetText, replacementText);
+      await fs.writeFile(absolutePath, newContent, "utf-8");
+      
+      return `File successfully edited. Replaced the specified text block in ${filePath}.`;
+    } catch (error: any) {
+      return `Error editing file: ${error.message}`;
+    }
+  }
+});
