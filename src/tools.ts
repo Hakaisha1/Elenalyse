@@ -101,9 +101,16 @@ export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner:
   parameters: z.object({
     filePath: z.string().describe("The relative path to the file, e.g., 'src/utils.ts'"),
     content: z.string().describe("The complete content to write to the file"),
-  }),
+  }).passthrough(),
   // @ts-ignore
-  execute: async ({ filePath, content }: { filePath?: string, content?: string }) => {
+  execute: async (args: any) => {
+    const filePath = args.filePath || args.path || args.file || args.filename;
+    const content = args.content || args.code || args.text;
+
+    if (!filePath || content === undefined) {
+      return "Error: You must provide both 'filePath' and 'content' arguments to use this tool.";
+    }
+
     onPauseSpinner();
     let answer = "n";
     try {
@@ -127,7 +134,6 @@ export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner:
     }
 
     try {
-      if (!filePath || content === undefined) return "Error: filePath and content arguments are required.";
       const absolutePath = path.resolve(process.cwd(), filePath);
       
       const relative = path.relative(process.cwd(), absolutePath);
@@ -150,9 +156,17 @@ export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: 
     filePath: z.string().describe("The relative path to the file, e.g., 'src/index.ts'"),
     targetText: z.string().describe("The exact text in the file you want to replace. Must match exactly."),
     replacementText: z.string().describe("The new text to replace the target text with."),
-  }),
+  }).passthrough(),
   // @ts-ignore
-  execute: async ({ filePath, targetText, replacementText }: { filePath?: string, targetText?: string, replacementText?: string }) => {
+  execute: async (args: any) => {
+    const filePath = args.filePath || args.path || args.file || args.filename;
+    const targetText = args.targetText || args.oldText || args.search;
+    const replacementText = args.replacementText || args.newText || args.replace;
+
+    if (!filePath || !targetText || replacementText === undefined) {
+      return "Error: You must provide 'filePath', 'targetText', and 'replacementText' arguments to use this tool.";
+    }
+
     onPauseSpinner();
     let answer = "n";
     try {
@@ -176,7 +190,6 @@ export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: 
     }
 
     try {
-      if (!filePath || !targetText || replacementText === undefined) return "Error: filePath, targetText, and replacementText arguments are required.";
       const absolutePath = path.resolve(process.cwd(), filePath);
       
       const relative = path.relative(process.cwd(), absolutePath);
