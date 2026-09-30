@@ -51,10 +51,12 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
   const colorFn = (chalk as any)[colorName] || chalk.white;
   
   const spinner = ora(`Elenalyse (${activePersona.toUpperCase()}) is thinking...`).start();
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   try {
     const config = getConfig();
     const aiClientFactory = await getAiClient(provider, model, config);
+
 
     const { text, toolCalls, toolResults, usage } = await generateText({
       model: aiClientFactory,
@@ -65,15 +67,18 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
         listDir: listDirTool,
         writeFile: createWriteFileTool(
           () => spinner.stop(),
-          () => spinner.start()
+          () => spinner.start(),
+          rl
         ),
         editFile: createEditFileTool(
           () => spinner.stop(),
-          () => spinner.start()
+          () => spinner.start(),
+          rl
         ),
         runCommand: createRunCommandTool(
           () => spinner.stop(),
-          () => spinner.start()
+          () => spinner.start(),
+          rl
         )
       },
       // @ts-ignore
@@ -116,6 +121,8 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
   } catch (error: any) {
     spinner.fail("Failed to get response from AI engine.");
     console.error(chalk.red(error.message));
+  } finally {
+    rl.close();
   }
 }
 
