@@ -9,20 +9,36 @@ import chalk from "chalk";
 
 const execAsync = promisify(exec);
 
+const BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg', '.mp3', '.mp4', '.wav', '.ogg', '.zip', '.tar', '.gz', '.rar', '.7z', '.exe', '.dll', '.so', '.dylib', '.bin', '.dat', '.pdf', '.woff', '.woff2', '.ttf', '.eot']);
+const MAX_FILE_SIZE = 50 * 1024; // 50KB
+const MAX_OUTPUT_CHARS = 5000;
+
 export const readFileTool = tool({
-  description: "Read the contents of a file in the user's workspace.",
+  description: "Read the contents of a file in the user's workspace. Returns an error for binary files or files larger than 50KB.",
   parameters: z.object({
     filePath: z.string().describe("The relative path to the file to read, e.g., 'src/index.ts'"),
-  }),
+  }).passthrough(),
   // @ts-ignore - Ignore inference failure in this environment
-  execute: async ({ filePath }: { filePath?: string }) => {
+  execute: async (args: any) => {
     try {
+      const filePath = args.filePath || args.path || args.file || args.filename;
       if (!filePath) return "Error: filePath argument is required.";
+
+      const ext = path.extname(filePath).toLowerCase();
+      if (BINARY_EXTENSIONS.has(ext)) {
+        return `Error: '${filePath}' is a binary file (${ext}). This tool only reads text files.`;
+      }
+
       const absolutePath = path.resolve(process.cwd(), filePath);
       
       const relative = path.relative(process.cwd(), absolutePath);
       if (relative.startsWith("..") || path.isAbsolute(relative)) {
         return "Error: Path traversal detected. Access denied.";
+      }
+
+      const stat = await fs.stat(absolutePath);
+      if (stat.size > MAX_FILE_SIZE) {
+        return `Error: File is too large (${(stat.size / 1024).toFixed(1)}KB). Maximum allowed is ${MAX_FILE_SIZE / 1024}KB. Consider reading a specific section or using a smaller file.`;
       }
 
       const content = await fs.readFile(absolutePath, "utf-8");
@@ -33,16 +49,17 @@ export const readFileTool = tool({
   },
 });
 
+
 export const listDirTool = tool({
   description: "List all files and directories in a given path.",
   parameters: z.object({
     dirPath: z.string().describe("The relative path to the directory to list, e.g., '.' for current directory"),
-  }),
+  }).passthrough(),
   // @ts-ignore - Ignore inference failure in this environment
-  execute: async ({ dirPath }: { dirPath?: string }) => {
+  execute: async (args: any) => {
     try {
-      const targetPath = dirPath || ".";
-      const absolutePath = path.resolve(process.cwd(), targetPath);
+      const dirPath = args.dirPath || args.path || args.directory || args.dir || ".";
+      const absolutePath = path.resolve(process.cwd(), dirPath);
 
       const relative = path.relative(process.cwd(), absolutePath);
       if (relative.startsWith("..") || path.isAbsolute(relative)) {
