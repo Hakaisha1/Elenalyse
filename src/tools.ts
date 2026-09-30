@@ -111,9 +111,13 @@ export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner
     }
 
     try {
-      const { stdout, stderr } = await execAsync(command, { cwd: process.cwd() });
-      return `STDOUT:\n${stdout}\nSTDERR:\n${stderr}`;
+      const { stdout, stderr } = await execAsync(command, { cwd: process.cwd(), timeout: 30000 });
+      const truncate = (s: string) => s.length > MAX_OUTPUT_CHARS ? s.slice(0, MAX_OUTPUT_CHARS) + `\n...[Output truncated. Total length: ${s.length} chars]` : s;
+      return `STDOUT:\n${truncate(stdout)}\nSTDERR:\n${truncate(stderr)}`;
     } catch (err: any) {
+      if (err.killed) {
+        return `Error: Command timed out after 30 seconds and was killed. The command may be a long-running process (e.g., a dev server). Inform the user.`;
+      }
       return `Error executing command: ${err.message}\nIf this is a syntax error, remember you are on ${process.platform}. Use appropriate shell commands.`;
     }
   }
