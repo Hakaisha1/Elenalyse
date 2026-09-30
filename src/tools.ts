@@ -191,10 +191,10 @@ export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner:
 });
 
 export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: () => void, rlInterface?: any) => tool({
-  description: "Edit an existing file by replacing a specific block of text with new text. YOU MUST USE THIS TOOL TO EDIT FILES INSTEAD OF OUTPUTTING CODE BLOCKS.",
+  description: "Edit an existing file by replacing a specific block of text with new text. YOU MUST USE THIS TOOL TO EDIT FILES INSTEAD OF OUTPUTTING CODE BLOCKS. IMPORTANT: You MUST first read the file with readFile to know its exact current content before attempting an edit.",
   parameters: z.object({
     filePath: z.string().describe("The relative path to the file, e.g., 'src/index.ts'"),
-    targetText: z.string().describe("The exact text in the file you want to replace. Must match exactly."),
+    targetText: z.string().describe("The exact text in the file you want to replace. Must match exactly, including whitespace and indentation."),
     replacementText: z.string().describe("The new text to replace the target text with."),
   }).passthrough(),
   // @ts-ignore
@@ -205,6 +205,12 @@ export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: 
 
     if (!filePath || !targetText || replacementText === undefined) {
       return "Error: You must provide 'filePath', 'targetText', and 'replacementText' arguments to use this tool.";
+    }
+
+    const absolutePath = path.resolve(process.cwd(), filePath);
+    const relative = path.relative(process.cwd(), absolutePath);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      return "Error: Path traversal detected. Access denied.";
     }
 
     onPauseSpinner();
@@ -230,20 +236,19 @@ export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: 
     }
 
     try {
-      const absolutePath = path.resolve(process.cwd(), filePath);
+      let content = await fs.readFile(absolutePath, "utf-8");
       
-      const relative = path.relative(process.cwd(), absolutePath);
-      if (relative.startsWith("..") || path.isAbsolute(relative)) {
-        return "Error: Path traversal detected. Access denied.";
+      // Normalize line endings for cross-platform compatibility
+      const normalizedContent = content.replace(/\r\n/g, "\n");
+      const normalizedTarget = targetText.replace(/\r\n/g, "\n");
+      
+      if (!normalizedContent.includes(normalizedTarget)) {
+        // Provide helpful context: show first few lines of file so AI can self-correct
+        const firstLines = normalizedContent.split("\n").slice(0, 10).join("\n");
+        return `Error: The targetText was not found in the file. The file's first 10 lines are:\n---\n${firstLines}\n---\nMake sure your targetText is an EXACT substring of the file's current content. Use readFile first to see the full content.`;
       }
-
-      const content = await fs.readFile(absolutePath, "utf-8");
       
-      if (!content.includes(targetText)) {
-        return `Error: The targetText was not found in the file. Make sure you included the exact indentation and whitespace. Remember that the targetText must be an EXACT substring match of the file's current content.`;
-      }
-      
-      const newContent = content.replace(targetText, replacementText);
+      const newContent = normalizedContent.replace(normalizedTarget, replacementText);
       await fs.writeFile(absolutePath, newContent, "utf-8");
       
       return `File successfully edited. Replaced the specified text block in ${filePath}.`;
