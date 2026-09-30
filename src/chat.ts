@@ -354,7 +354,8 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
           if (event.toolCalls && event.toolCalls.length > 0) {
             const currentToolCallsStr = JSON.stringify(event.toolCalls.map(tc => ({ name: tc.toolName, args: (tc as any).args })));
             if (currentToolCallsStr === previousToolCallsStr) {
-              console.log(chalk.red(`\n[ERROR] Agent Loop Detected! Repeated identical tool call: ${event.toolCalls[0].toolName}`));
+              console.log(chalk.red(`\n[ERROR] Agent Loop Detected! Repeated identical tool call: ${event.toolCalls[0].toolName}. Aborting.`));
+              throw new Error(`Agent loop detected: ${event.toolCalls[0].toolName} called with identical arguments twice in a row.`);
             }
             previousToolCallsStr = currentToolCallsStr;
           }
