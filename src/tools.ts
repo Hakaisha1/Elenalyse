@@ -135,11 +135,30 @@ export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner:
       return "Error: You must provide both 'filePath' and 'content' arguments to use this tool.";
     }
 
+    const absolutePath = path.resolve(process.cwd(), filePath);
+    const relative = path.relative(process.cwd(), absolutePath);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      return "Error: Path traversal detected. Access denied.";
+    }
+
+    // Check if file already exists to warn user
+    let fileExists = false;
+    let existingSize = 0;
+    try {
+      const stat = await fs.stat(absolutePath);
+      fileExists = true;
+      existingSize = stat.size;
+    } catch {}
+
     onPauseSpinner();
     let answer = "n";
     try {
       console.log(""); 
-      const promptText = chalk.yellow(`⚠️  Elenalyse is requesting to WRITE file: ${chalk.bold(filePath)}\nAllow execution? [Y/n]: `);
+      const action = fileExists ? "OVERWRITE" : "CREATE";
+      const sizeInfo = fileExists 
+        ? ` (existing: ${(existingSize / 1024).toFixed(1)}KB → new: ${(Buffer.byteLength(content) / 1024).toFixed(1)}KB)`
+        : ` (${(Buffer.byteLength(content) / 1024).toFixed(1)}KB)`;
+      const promptText = chalk.yellow(`⚠️  Elenalyse is requesting to ${chalk.bold(action)} file: ${chalk.bold(filePath)}${sizeInfo}\nAllow execution? [Y/n]: `);
       if (rlInterface) {
         rlInterface.resume();
         answer = await rlInterface.question(promptText);
@@ -158,16 +177,9 @@ export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner:
     }
 
     try {
-      const absolutePath = path.resolve(process.cwd(), filePath);
-      
-      const relative = path.relative(process.cwd(), absolutePath);
-      if (relative.startsWith("..") || path.isAbsolute(relative)) {
-        return "Error: Path traversal detected. Access denied.";
-      }
-
       await fs.mkdir(path.dirname(absolutePath), { recursive: true });
       await fs.writeFile(absolutePath, content, "utf-8");
-      return `File successfully written to ${filePath}`;
+      return `File successfully ${fileExists ? "overwritten" : "created"}: ${filePath}`;
     } catch (error: any) {
       return `Error writing file: ${error.message}`;
     }
