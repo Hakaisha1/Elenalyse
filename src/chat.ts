@@ -1,4 +1,4 @@
-import { generateText } from "ai";
+import { generateText, streamText } from "ai";
 import * as readline from "readline/promises";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
@@ -398,7 +398,7 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
 
       let previousToolCallsStr = "";
 
-      const { text, toolCalls, toolResults, usage, response, steps } = await generateText({
+      const result = streamText({
         model: aiModel,
         system: await getPersonaPrompt(activePersona, voiceEnabled),
         messages: memory[activePersona],
@@ -454,69 +454,66 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
         }
       });
 
+      // Stream text to terminal in real-time
+      let headerPrinted = false;
+      let fullText = "";
+
+      for await (const chunk of result.textStream) {
+        if (!headerPrinted) {
+          spinner.stop();
+          process.stdout.write(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `));
+          headerPrinted = true;
+        }
+        process.stdout.write(chunk);
+        fullText += chunk;
+      }
+
+      // Wait for the full result to finalize (tool calls, usage, etc.)
+      const finalResult = await result.response;
+      const usage = await result.usage;
+      const steps = await result.steps;
+
+      // If no text was streamed (tool-only response), do a follow-up generateText
+      if (!fullText && steps && steps.length > 0) {
+        const lastStep = steps[steps.length - 1];
+        if (lastStep.toolCalls && lastStep.toolCalls.length > 0) {
+          spinner.stop();
+          const toolSpinner = ora(`Evaluating ${lastStep.toolCalls[0].toolName} results...`).start();
+
+          const evaluationMessages = [...memory[activePersona]];
+          if (finalResult && finalResult.messages) {
+            evaluationMessages.push(...finalResult.messages);
+          }
+
+          const secondRun = await generateText({
+            model: aiModel,
+            system: await getPersonaPrompt(activePersona, voiceEnabled),
+            messages: evaluationMessages,
+          });
+          toolSpinner.stop();
+          fullText = secondRun.text;
+
+          process.stdout.write(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + fullText);
+        }
+      }
+
+      if (!headerPrinted) spinner.stop();
+      process.stdout.write("\n");
+
       if (steps && steps.length >= 5) {
-        console.log(chalk.yellow(`\n[WARNING] Max steps (5) reached. The AI was forcefully stopped.`));
+        console.log(chalk.yellow(`[WARNING] Max steps (5) reached. The AI was forcefully stopped.`));
       }
 
-      spinner.stop();
-
-      let finalText = text;
-      
-      if (!text && toolCalls && toolCalls.length > 0 && toolResults && toolResults.length > 0) {
-        const toolSpinner = ora(`Evaluating ${toolCalls[0].toolName} results...`).start();
-        const evaluationMessages = [...memory[activePersona]];
-        
-        if (response && response.messages) {
-          evaluationMessages.push(...response.messages);
-        } else {
-          // Fallback if response.messages is not available for some reason
-          const assistantContent = toolCalls.map(tc => ({
-            type: "tool-call" as const,
-            toolCallId: tc.toolCallId,
-            toolName: tc.toolName,
-            args: (tc as any).args
-          }));
-
-          const toolContent = toolResults.map(tr => ({
-            type: "tool-result" as const,
-            toolCallId: tr.toolCallId,
-            toolName: tr.toolName,
-            result: (tr as any).result || (tr as any).output || "Success"
-          }));
-
-          evaluationMessages.push({ role: "assistant", content: assistantContent });
-          evaluationMessages.push({ role: "tool", content: toolContent });
-        }
-
-        const secondRun = await generateText({
-          model: aiModel,
-          system: await getPersonaPrompt(activePersona, voiceEnabled),
-          messages: evaluationMessages,
-        });
-        toolSpinner.stop();
-        finalText = secondRun.text;
-        
-        if (secondRun.usage) {
-          (usage as any).promptTokens += (secondRun.usage as any).promptTokens || 0;
-          (usage as any).completionTokens += (secondRun.usage as any).completionTokens || 0;
-        }
-
-        if (response && response.messages) {
-          memory[activePersona].push(...sanitizeForMemory(response.messages));
-        }
-        memory[activePersona].push({ role: "assistant", content: stripVoiceTags(finalText) });
+      // Save to memory
+      if (finalResult && finalResult.messages) {
+        memory[activePersona].push(...sanitizeForMemory(finalResult.messages));
       } else {
-        // AI SDK handled it natively with maxSteps, push the full response history
-        if (response && response.messages) {
-          memory[activePersona].push(...sanitizeForMemory(response.messages));
-        } else {
-          memory[activePersona].push({ role: "assistant", content: stripVoiceTags(finalText) });
-        }
+        memory[activePersona].push({ role: "assistant", content: stripVoiceTags(fullText) });
       }
 
-      let { displayText, voiceLines } = extractVoiceSegments(finalText, debug);
-      console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + displayText);
-      console.log(chalk.gray(`[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]`));
+      let { displayText, voiceLines } = extractVoiceSegments(fullText, debug);
+      // displayText already printed via stream, only show token usage
+      console.log(chalk.gray(`[Token Usage: ${(usage as any)?.promptTokens || 0} input / ${(usage as any)?.completionTokens || 0} output]`));
 
       if (debug) {
         console.log(chalk.gray(`[DEBUG] Memory (${memory[activePersona].length} messages):`));
