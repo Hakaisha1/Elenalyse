@@ -24,6 +24,29 @@ function extractVoiceSegments(responseText: string, debug: boolean = false): { d
   return { displayText: displayText.trim(), voiceLines };
 }
 
+function stripVoiceTags(text: string): string {
+  return text.replace(/<voice>[\s\S]*?<\/voice>/g, "").trim();
+}
+
+function sanitizeForMemory(messages: any[]): any[] {
+  return messages.map((m: any) => {
+    if (m.role === "assistant") {
+      let content: string;
+      if (Array.isArray(m.content)) {
+        content = m.content
+          .filter((p: any) => p.type === "text")
+          .map((p: any) => p.text)
+          .join("");
+      } else {
+        content = String(m.content || "");
+      }
+      return { role: "assistant", content: stripVoiceTags(content) };
+    }
+    // For tool-call and tool-result messages, keep role + content only
+    return { role: m.role, content: m.content };
+  });
+}
+
 async function playVoiceLines(voiceLines: string[], speakerId: number) {
   for (let i = 0; i < voiceLines.length; i++) {
     try {
@@ -155,6 +178,41 @@ async function getAiClient(provider: string, model: string, config: any) {
   throw new Error(`Unknown AI provider configured: ${provider}`);
 }
 
+// --- Handoff Helpers ---
+interface SessionState {
+  filesTouched: Set<string>;
+}
+
+function getRecentContext(history: any[], maxChars: number = 1000): any[] {
+  const result: any[] = [];
+  let charCount = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msgLen = typeof history[i].content === "string" ? history[i].content.length : 100;
+    charCount += msgLen;
+    if (charCount > maxChars) break;
+    result.unshift(history[i]);
+  }
+  return result;
+}
+
+function buildHandoffNote(fromPersona: string, history: any[], state: SessionState): string {
+  const lastUserMsg = [...history].reverse().find(m => m.role === "user");
+  const filesLine = state.filesTouched.size > 0
+    ? `Files touched this session: ${[...state.filesTouched].join(", ")}`
+    : "No files were touched in this session.";
+  const recentWindow = getRecentContext(history);
+  const recentSummary = recentWindow
+    .filter(m => typeof m.content === "string")
+    .map(m => `[${m.role}]: ${m.content.length > 200 ? m.content.slice(0, 200) + "..." : m.content}`)
+    .join("\n");
+
+  return `[SYSTEM HANDOFF NOTE] You are taking over from ${fromPersona.toUpperCase()}.
+${filesLine}
+Last user message: "${lastUserMsg?.content?.slice(0, 200) ?? "(none)"}"
+Recent conversation context:
+${recentSummary}`;
+}
+
 export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean = false) {
   let config = getConfig();
   let activePersona = config.activePersona;
@@ -210,6 +268,7 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
     rin: []
   };
   
+  let sessionState: SessionState = { filesTouched: new Set() };
   let oldPersonaNameForHandoff = "";
 
   while (true) {
@@ -280,7 +339,7 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
     if (input.startsWith("/persona ")) {
       const newPersona = input.split(" ")[1]?.toLowerCase();
       if (newPersona && ["eli", "rei", "sora", "rin"].includes(newPersona) && newPersona !== activePersona) {
-        // Fast Synchronous Handoff: copy last 6 messages (3 turns)
+        // Sliding Window Handoff with SessionState
         const currentHistory = memory[activePersona];
         oldPersonaNameForHandoff = activePersona;
 
@@ -289,13 +348,15 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
         setConfig(config);
 
         if (currentHistory.length > 0) {
-          const recentHistory = currentHistory.slice(-6);
+          const handoffNote = buildHandoffNote(oldPersonaNameForHandoff, currentHistory, sessionState);
           memory[activePersona].push(
-            { role: "user", content: `[SYSTEM HANDOFF NOTE] You are taking over from ${oldPersonaNameForHandoff.toUpperCase()}. Here is the recent conversation history to give you context.` },
-            { role: "assistant", content: "Understood. I will resume the conversation from here based on my own persona traits." },
-            ...recentHistory
+            { role: "user", content: handoffNote },
+            { role: "assistant", content: "Understood. I have reviewed the context and will continue assisting based on my own persona." }
           );
         }
+
+        // Reset session state for the new persona's session
+        sessionState = { filesTouched: new Set() };
 
         console.log(chalk.gray(`[ℹ] Persona changed to ${activePersona.toUpperCase()}`));
       } else if (newPersona === activePersona) {
@@ -365,6 +426,15 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
               throw new Error(`Agent loop detected: ${event.toolCalls[0].toolName} called with identical arguments twice in a row.`);
             }
             previousToolCallsStr = currentToolCallsStr;
+
+            // Track files touched for handoff context
+            for (const tc of event.toolCalls) {
+              const args = (tc as any).args;
+              const filePath = args?.filePath || args?.path || args?.file || args?.filename || args?.dirPath;
+              if (filePath && typeof filePath === "string") {
+                sessionState.filesTouched.add(filePath);
+              }
+            }
           }
         }
       });
@@ -417,21 +487,32 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
         }
 
         if (response && response.messages) {
-          memory[activePersona].push(...response.messages);
+          memory[activePersona].push(...sanitizeForMemory(response.messages));
         }
-        memory[activePersona].push({ role: "assistant", content: finalText });
+        memory[activePersona].push({ role: "assistant", content: stripVoiceTags(finalText) });
       } else {
         // AI SDK handled it natively with maxSteps, push the full response history
         if (response && response.messages) {
-          memory[activePersona].push(...response.messages);
+          memory[activePersona].push(...sanitizeForMemory(response.messages));
         } else {
-          memory[activePersona].push({ role: "assistant", content: finalText });
+          memory[activePersona].push({ role: "assistant", content: stripVoiceTags(finalText) });
         }
       }
 
       let { displayText, voiceLines } = extractVoiceSegments(finalText, debug);
       console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + displayText);
-      console.log(chalk.gray(`[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]\n`));
+      console.log(chalk.gray(`[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]`));
+
+      if (debug) {
+        console.log(chalk.gray(`[DEBUG] Memory (${memory[activePersona].length} messages):`));
+        memory[activePersona].forEach((m: any, i: number) => {
+          const preview = typeof m.content === "string" 
+            ? m.content.slice(0, 80).replace(/\n/g, "\\n") 
+            : `[${Array.isArray(m.content) ? m.content.length + " parts" : typeof m.content}]`;
+          console.log(chalk.gray(`  [${i}] ${m.role}: ${preview}${typeof m.content === "string" && m.content.length > 80 ? "..." : ""}`));
+        });
+      }
+      console.log("");
 
       if (voiceEnabled && voiceLines.length > 0) {
         const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
