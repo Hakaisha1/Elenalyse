@@ -213,6 +213,18 @@ Recent conversation context:
 ${recentSummary}`;
 }
 
+const MAX_MEMORY_MESSAGES = 40;
+
+function trimMemory(memory: any[], debug: boolean = false): any[] {
+  if (memory.length <= MAX_MEMORY_MESSAGES) return memory;
+  const trimCount = memory.length - MAX_MEMORY_MESSAGES;
+  if (debug) {
+    console.log(chalk.gray(`[DEBUG] Memory trimmed: removed ${trimCount} oldest messages (${memory.length} → ${MAX_MEMORY_MESSAGES})`));
+  }
+  // Keep the most recent messages, drop the oldest
+  return memory.slice(trimCount);
+}
+
 export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean = false) {
   let config = getConfig();
   let activePersona = config.activePersona;
@@ -380,6 +392,9 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
 
     try {
       const aiModel = await getAiClient(provider, model, config);
+
+      // Trim memory before sending to API
+      memory[activePersona] = trimMemory(memory[activePersona], debug);
 
       let previousToolCallsStr = "";
 
