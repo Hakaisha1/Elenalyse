@@ -210,7 +210,9 @@ function buildHandoffNote(fromPersona: string, history: any[], state: SessionSta
 ${filesLine}
 Last user message: "${lastUserMsg?.content?.slice(0, 200) ?? "(none)"}"
 Recent conversation context:
-${recentSummary}`;
+${recentSummary}
+
+[CRITICAL INSTRUCTION: You MUST reply in the same language the user was using in the context above (e.g., if the user spoke Indonesian, you must reply in Indonesian). Do not switch to English just because this system note is in English.]`;
 }
 
 const MAX_MEMORY_MESSAGES = 40;
@@ -363,7 +365,7 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
           const handoffNote = buildHandoffNote(oldPersonaNameForHandoff, currentHistory, sessionState);
           memory[activePersona].push(
             { role: "user", content: handoffNote },
-            { role: "assistant", content: "Understood. I have reviewed the context and will continue assisting based on my own persona." }
+            { role: "assistant", content: "[SYSTEM: Context accepted. Persona initialized. Ready to respond in the user's language.]" }
           );
         }
 
