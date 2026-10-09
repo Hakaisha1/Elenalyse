@@ -139,8 +139,8 @@ let engineProcess: ReturnType<typeof spawn> | null = null;
 
 export async function ensureEngineRunning(): Promise<void> {
   try {
-    execSync("curl -s -o /dev/null http://127.0.0.1:50021/version");
-    return; // Already running
+    const res = await fetch("http://127.0.0.1:50021/version");
+    if (res.ok) return; // Already running
   } catch {
     // Not running, proceed to start
   }
@@ -157,8 +157,8 @@ export async function ensureEngineRunning(): Promise<void> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     try {
-      execSync("curl -s -o /dev/null http://127.0.0.1:50021/version");
-      return;
+      const res = await fetch("http://127.0.0.1:50021/version");
+      if (res.ok) return;
     } catch {
       await new Promise(r => setTimeout(r, 500));
     }
