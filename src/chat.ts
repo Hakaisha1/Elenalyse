@@ -14,18 +14,25 @@ import { readFileTool, listDirTool, createRunCommandTool, createWriteFileTool, c
 import { ensureEngineDownloaded, ensureEngineRunning } from "./voiceEngine.js";
 import { synthesizeSpeech } from "./tts.js";
 
-function extractVoiceSegments(responseText: string, debug: boolean = false): { displayText: string; voiceLines: string[] } {
+export interface VoiceSegment {
+  text: string;
+  emotion?: string;
+}
+
+function extractVoiceSegments(responseText: string, debug: boolean = false): { displayText: string; voiceLines: VoiceSegment[] } {
   if (!responseText) return { displayText: "", voiceLines: [] };
-  const voiceLines: string[] = [];
-  const displayText = responseText.replace(/<voice>([\s\S]*?)<\/voice>/g, (_, content) => {
-    voiceLines.push(content.trim());
-    return debug ? chalk.magenta(`\n[VOICE: ${content.trim()}]\n`) : ""; // Hide the voice text from the terminal unless debug is true
+  const voiceLines: VoiceSegment[] = [];
+  
+  // Match <voice> or <voice emotion="sad">
+  const displayText = responseText.replace(/<voice(?:\s+emotion="([^"]+)")?>([\s\S]*?)<\/voice>/g, (_, emotion, content) => {
+    voiceLines.push({ text: content.trim(), emotion });
+    return debug ? chalk.magenta(`\n[VOICE${emotion ? ` (${emotion})` : ''}: ${content.trim()}]\n`) : "";
   });
   return { displayText: displayText.trim(), voiceLines };
 }
 
 function stripVoiceTags(text: string): string {
-  return text.replace(/<voice>[\s\S]*?<\/voice>/g, "").trim();
+  return text.replace(/<voice(?:\s+emotion="([^"]+)")?>[\s\S]*?<\/voice>/g, "").trim();
 }
 
 function sanitizeForMemory(messages: any[]): any[] {
@@ -47,10 +54,10 @@ function sanitizeForMemory(messages: any[]): any[] {
   });
 }
 
-async function playVoiceLines(voiceLines: string[], speakerId: number) {
+async function playVoiceLines(voiceLines: VoiceSegment[], speakerId: number) {
   for (let i = 0; i < voiceLines.length; i++) {
     try {
-      const buffer = await synthesizeSpeech(voiceLines[i], speakerId);
+      const buffer = await synthesizeSpeech(voiceLines[i].text, speakerId, voiceLines[i].emotion);
       const tempPath = path.join(os.tmpdir(), `elenalyse_voice_${Date.now()}_${i}.wav`);
       fs.writeFileSync(tempPath, buffer);
       await sound.play(tempPath);
