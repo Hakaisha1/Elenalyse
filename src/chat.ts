@@ -13,6 +13,14 @@ import { getPersonaPrompt, getPersonaColor, PERSONA_SPEAKER_MAP } from "./person
 import { readFileTool, listDirTool, createRunCommandTool, createWriteFileTool, createEditFileTool } from "./tools.js";
 import { ensureEngineDownloaded, ensureEngineRunning } from "./voiceEngine.js";
 import { synthesizeSpeech } from "./tts.js";
+import {
+  startBridgeServer,
+  stopBridgeServer,
+  broadcastSpeakEvent,
+  broadcastPersonaEvent,
+  hasConnectedClients,
+  VoiceEventPayload,
+} from "./bridge.js";
 
 export interface VoiceSegment {
   text: string;
@@ -55,13 +63,31 @@ function sanitizeForMemory(messages: any[]): any[] {
 }
 
 async function playVoiceLines(voiceLines: VoiceSegment[], speakerId: number) {
+  const { activePersona } = getConfig();
+
   for (let i = 0; i < voiceLines.length; i++) {
     try {
-      const { audio } = await synthesizeSpeech(voiceLines[i].text, speakerId, voiceLines[i].emotion);
-      const tempPath = path.join(os.tmpdir(), `elenalyse_voice_${Date.now()}_${i}.wav`);
-      fs.writeFileSync(tempPath, audio);
-      await sound.play(tempPath);
-      fs.unlinkSync(tempPath);
+      const { audio, cues, totalDuration } = await synthesizeSpeech(voiceLines[i].text, speakerId, voiceLines[i].emotion);
+
+      if (hasConnectedClients()) {
+        const payload: VoiceEventPayload = {
+          id: `voice_${Date.now()}_${i}`,
+          persona: activePersona,
+          emotion: voiceLines[i].emotion,
+          text: voiceLines[i].text,
+          audioBase64: audio.toString("base64"),
+          cues,
+          totalDuration,
+        };
+        broadcastSpeakEvent(payload);
+        // Beri jeda durasi audio agar segmen berikutnya tidak bertabrakan
+        await new Promise((resolve) => setTimeout(resolve, totalDuration * 1000 + 120));
+      } else {
+        const tempPath = path.join(os.tmpdir(), `elenalyse_voice_${Date.now()}_${i}.wav`);
+        fs.writeFileSync(tempPath, audio);
+        await sound.play(tempPath);
+        fs.unlinkSync(tempPath);
+      }
     } catch (e: any) {
       console.log(chalk.red(`\n[TTS Error: ${e.message}]`));
     }
@@ -142,16 +168,20 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
     console.log(chalk.gray(`\n[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]`));
 
     if (voiceEnabled) {
+      await startBridgeServer();
       let { displayText, voiceLines } = extractVoiceSegments(text, debug);
       if (voiceLines.length > 0) {
         const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
-        playVoiceLines(voiceLines, speakerId);
+        await playVoiceLines(voiceLines, speakerId);
       }
     }
   } catch (error: any) {
     spinner.fail("Failed to get response from AI engine.");
     console.error(chalk.red(error.message));
   } finally {
+    if (voiceEnabled) {
+      stopBridgeServer();
+    }
     rl.close();
   }
 }
@@ -256,6 +286,7 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
   printWelcome();
 
   if (voiceEnabled) {
+    await startBridgeServer();
     try {
       // Check if Voicevox is already running (e.g. user manually opened Voicevox Editor)
       const isAlreadyRunning = await fetch("http://127.0.0.1:50021/version")
@@ -367,6 +398,7 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
         activePersona = newPersona as any;
         config.activePersona = activePersona;
         setConfig(config);
+        broadcastPersonaEvent(activePersona);
 
         if (currentHistory.length > 0) {
           const handoffNote = buildHandoffNote(oldPersonaNameForHandoff, currentHistory, sessionState);
@@ -551,4 +583,5 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
   }
   
   rl.close();
+  stopBridgeServer();
 }
