@@ -1,6 +1,92 @@
 const VOICEVOX_BASE_URL = "http://127.0.0.1:50021";
 
-export async function synthesizeSpeech(text: string, speakerId: number, emotion?: string): Promise<Buffer> {
+export type VrmViseme = "aa" | "ih" | "ou" | "ee" | "oh";
+
+export interface VisemeCue {
+  time: number;            // Timestamp mulai dalam detik
+  duration: number;        // Durasi dalam detik
+  vowel: VrmViseme | null; // null jika konsonan, jeda, atau diam
+  text?: string;           // Teks karakter mora untuk inspeksi
+}
+
+export interface SpeechSynthesisResult {
+  audio: Buffer;
+  cues: VisemeCue[];
+  totalDuration: number;
+}
+
+function mapVoicevoxVowelToVrm(vowel: string): VrmViseme | null {
+  const v = vowel.toLowerCase();
+  switch (v) {
+    case "a":
+      return "aa";
+    case "i":
+      return "ih";
+    case "u":
+      return "ou";
+    case "e":
+      return "ee";
+    case "o":
+      return "oh";
+    default:
+      // "N" (ん), pauses ("pau"), geminate ("cl") atau vokal tidak terdefinisi
+      return null;
+  }
+}
+
+function extractVisemeCues(audioQuery: any): { cues: VisemeCue[]; totalDuration: number } {
+  const speedScale = typeof audioQuery.speedScale === "number" && audioQuery.speedScale > 0 ? audioQuery.speedScale : 1.0;
+  const cues: VisemeCue[] = [];
+  let currentTime = 0;
+
+  // Pre-phoneme silence
+  if (typeof audioQuery.prePhonemeLength === "number" && audioQuery.prePhonemeLength > 0) {
+    const dur = audioQuery.prePhonemeLength / speedScale;
+    cues.push({ time: currentTime, duration: dur, vowel: null, text: "pre" });
+    currentTime += dur;
+  }
+
+  // Accent phrases and moras
+  if (Array.isArray(audioQuery.accent_phrases)) {
+    for (const phrase of audioQuery.accent_phrases) {
+      if (Array.isArray(phrase.moras)) {
+        for (const mora of phrase.moras) {
+          // Consonant part (k, s, t, dsb)
+          if (mora.consonant && typeof mora.consonant_length === "number" && mora.consonant_length > 0) {
+            const cDur = mora.consonant_length / speedScale;
+            cues.push({ time: currentTime, duration: cDur, vowel: null, text: mora.consonant });
+            currentTime += cDur;
+          }
+          // Vowel part (a, i, u, e, o)
+          if (mora.vowel && typeof mora.vowel_length === "number" && mora.vowel_length > 0) {
+            const vDur = mora.vowel_length / speedScale;
+            const viseme = mapVoicevoxVowelToVrm(mora.vowel);
+            cues.push({ time: currentTime, duration: vDur, vowel: viseme, text: mora.text });
+            currentTime += vDur;
+          }
+        }
+      }
+
+      // Inter-phrase pause mora (jeda antar frasa)
+      if (phrase.pause_mora && typeof phrase.pause_mora.vowel_length === "number" && phrase.pause_mora.vowel_length > 0) {
+        const pDur = phrase.pause_mora.vowel_length / speedScale;
+        cues.push({ time: currentTime, duration: pDur, vowel: null, text: phrase.pause_mora.text });
+        currentTime += pDur;
+      }
+    }
+  }
+
+  // Post-phoneme silence
+  if (typeof audioQuery.postPhonemeLength === "number" && audioQuery.postPhonemeLength > 0) {
+    const postDur = audioQuery.postPhonemeLength / speedScale;
+    cues.push({ time: currentTime, duration: postDur, vowel: null, text: "post" });
+    currentTime += postDur;
+  }
+
+  return { cues, totalDuration: currentTime };
+}
+
+export async function synthesizeSpeech(text: string, speakerId: number, emotion?: string): Promise<SpeechSynthesisResult> {
   let queryRes: Response;
   try {
     queryRes = await fetch(
@@ -39,6 +125,9 @@ export async function synthesizeSpeech(text: string, speakerId: number, emotion?
     }
   }
 
+  // Ekstraksi cue vokal sebelum request synthesis
+  const { cues, totalDuration } = extractVisemeCues(audioQuery);
+
   const synthRes = await fetch(`${VOICEVOX_BASE_URL}/synthesis?speaker=${speakerId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -50,5 +139,10 @@ export async function synthesizeSpeech(text: string, speakerId: number, emotion?
   }
 
   const arrayBuffer = await synthRes.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return {
+    audio: Buffer.from(arrayBuffer),
+    cues,
+    totalDuration,
+  };
 }
+

@@ -57,9 +57,9 @@ function sanitizeForMemory(messages: any[]): any[] {
 async function playVoiceLines(voiceLines: VoiceSegment[], speakerId: number) {
   for (let i = 0; i < voiceLines.length; i++) {
     try {
-      const buffer = await synthesizeSpeech(voiceLines[i].text, speakerId, voiceLines[i].emotion);
+      const { audio } = await synthesizeSpeech(voiceLines[i].text, speakerId, voiceLines[i].emotion);
       const tempPath = path.join(os.tmpdir(), `elenalyse_voice_${Date.now()}_${i}.wav`);
-      fs.writeFileSync(tempPath, buffer);
+      fs.writeFileSync(tempPath, audio);
       await sound.play(tempPath);
       fs.unlinkSync(tempPath);
     } catch (e: any) {
