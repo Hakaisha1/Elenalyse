@@ -951,6 +951,14 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+const VOWEL_MAX_OPENING: Record<VrmViseme, number> = {
+  aa: 0.95, // Vokal A: bukaan jelas terlihat dari jarak framing setengah badan
+  ih: 0.85, // Vokal I: tarikan bibir melebar ke samping
+  ou: 0.80, // Vokal U: membulat maju
+  ee: 0.88, // Vokal E: agak terbuka dan melebar
+  oh: 0.92, // Vokal O: membulat terbuka penuh
+};
+
 class LipSyncController {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -1072,7 +1080,8 @@ class LipSyncController {
         sum += v * v;
       }
       const rms = Math.sqrt(sum / this.timeDomainData.length);
-      volume = Math.min(1.0, Math.max(0.0, (rms - 0.015) * 5.5));
+      // Sensitivitas volume dinaikkan: desibel suara vokal langsung terdeteksi
+      volume = Math.min(1.0, Math.max(0.0, (rms - 0.005) * 12.0));
     }
 
     if (this.isSpeaking && this.audioCtx) {
@@ -1089,10 +1098,12 @@ class LipSyncController {
 
       const vKeys: VrmViseme[] = ["aa", "ih", "ou", "ee", "oh"];
       for (const k of vKeys) {
-        if (k === activeVowel && volume > 0.03) {
-          // Gaya Kuudere: bukaan mulut tenang, maksimal 0.70 agar tetap terkontrol
-          const maxOpening = 0.70;
-          this.targetVisemes[k] = Math.min(maxOpening, Math.max(0.18, volume * maxOpening));
+        if (k === activeVowel) {
+          const maxOpening = VOWEL_MAX_OPENING[k];
+          // Baseline bukaan 0.45 agar gerakan mulut jelas terlihat dari kamera,
+          // meningkat proporsional hingga maxOpening (0.80 - 0.95) saat ada desibel suara
+          const dynamicOpening = 0.45 + Math.pow(volume, 0.6) * (maxOpening - 0.45);
+          this.targetVisemes[k] = Math.min(maxOpening, dynamicOpening);
         } else {
           this.targetVisemes[k] = 0;
         }
@@ -1107,8 +1118,8 @@ class LipSyncController {
 
     const vKeys: VrmViseme[] = ["aa", "ih", "ou", "ee", "oh"];
     for (const k of vKeys) {
-      // Damping responsif tanpa snapping (lambda 28.0)
-      this.currentVisemes[k] = damp(this.currentVisemes[k], this.targetVisemes[k], 28.0, delta);
+      // Damping 22.0: responsif mengikuti pergantian suku kata cepat, transisi luwes tanpa snapping
+      this.currentVisemes[k] = damp(this.currentVisemes[k], this.targetVisemes[k], 22.0, delta);
       vrm.expressionManager?.setValue(k, this.currentVisemes[k]);
     }
   }
