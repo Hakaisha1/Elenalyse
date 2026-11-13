@@ -16,6 +16,9 @@ import { ensureEngineDownloaded, ensureEngineRunning } from "./voiceEngine.js";
 import { synthesizeSpeech } from "./tts.js";
 import { undoLastChange } from "./undo.js";
 import { saveSession, loadSession, listSessions } from "./session.js";
+import { renderWelcomeBanner, printWelcomeBanner } from "./ui/banner.js";
+import { interactivePrompt } from "./ui/prompt.js";
+export { renderWelcomeBanner, printWelcomeBanner, interactivePrompt };
 import {
   startBridgeServer,
   stopBridgeServer,
@@ -352,24 +355,19 @@ export async function startInteractiveChat(
   let provider = config.provider;
   let model = config.model;
   
-  const printWelcome = () => {
-    console.clear();
-    console.log(chalk.magenta("==================================================="));
-    console.log(chalk.magenta.bold("✨ E L E N A L Y S E ✨"));
-    console.log(chalk.magenta("==================================================="));
-    console.log(chalk.gray(`[ℹ] Provider : ${provider}`));
-    if (config.fallbackProvider) {
-      console.log(chalk.gray(`[ℹ] Fallback : ${config.fallbackProvider}${config.fallbackModel ? ` (${config.fallbackModel})` : ""}`));
-    }
-    console.log(chalk.gray(`[ℹ] Model    : ${model}`));
-    console.log(chalk.gray(`[ℹ] Persona  : ${activePersona.toUpperCase()}`));
-    console.log(chalk.gray(`[ℹ] Memory   : ${memoryMode} (${MEMORY_LIMITS[memoryMode]} messages)`));
-    console.log(chalk.gray("---------------------------------------------------"));
-    console.log(chalk.cyan("Type your message below. Type '/help' to see the list of commands."));
-    console.log(chalk.magenta("===================================================\n"));
+  const showBanner = () => {
+    printWelcomeBanner({
+      persona: activePersona,
+      provider,
+      model,
+      fallbackProvider: config.fallbackProvider,
+      fallbackModel: config.fallbackModel,
+      memoryMode,
+      voiceEnabled,
+    });
   };
 
-  printWelcome();
+  showBanner();
 
   if (voiceEnabled) {
     await startBridgeServer();
@@ -411,7 +409,9 @@ export async function startInteractiveChat(
   let lastUserPrompt = "";
 
   while (true) {
-    const input = await rl.question(chalk.green("👤 You ❯ "));
+    const input = await interactivePrompt(chalk.green("👤 You ❯ "), {
+      personaColor: getPersonaColor(activePersona),
+    });
     if (!input.trim()) continue;
 
     if (input.startsWith("/exit")) {
@@ -420,7 +420,7 @@ export async function startInteractiveChat(
     }
 
     if (input.startsWith("/clear")) {
-      printWelcome();
+      showBanner();
       continue;
     }
 
