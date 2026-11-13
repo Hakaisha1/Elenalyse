@@ -13,6 +13,8 @@ import { getPersonaPrompt, getPersonaColor, PERSONA_SPEAKER_MAP } from "./person
 import { readFileTool, listDirTool, createRunCommandTool, createWriteFileTool, createEditFileTool } from "./tools.js";
 import { ensureEngineDownloaded, ensureEngineRunning } from "./voiceEngine.js";
 import { synthesizeSpeech } from "./tts.js";
+import { undoLastChange } from "./undo.js";
+import { saveSession, loadSession, listSessions } from "./session.js";
 import {
   startBridgeServer,
   stopBridgeServer,
@@ -364,13 +366,75 @@ export async function startInteractiveChat(
 
     if (input.startsWith("/help")) {
       console.log(chalk.cyan("\nAvailable Commands:"));
-      console.log(chalk.cyan("  /help           : Show this help menu"));
-      console.log(chalk.cyan("  /persona <name> : Change persona (eli/rei/sora/rin)"));
-      console.log(chalk.cyan("  /model <name>   : Change model (e.g., gemini-3.5-flash-lite)"));
-      console.log(chalk.cyan("  /provider <name>: Change provider (google/openai/openrouter/local)"));
-      console.log(chalk.cyan("  /api <prov> <key> : Save API Key (e.g., /api google AIza...)"));
-      console.log(chalk.cyan("  /clear          : Clear the console screen"));
-      console.log(chalk.cyan("  /exit           : Exit the application\n"));
+      console.log(chalk.cyan("  /help                : Show this help menu"));
+      console.log(chalk.cyan("  /persona <name>      : Change persona (eli/rei/sora/rin)"));
+      console.log(chalk.cyan("  /model <name>        : Change model (e.g., gemini-3.5-flash-lite)"));
+      console.log(chalk.cyan("  /provider <name>     : Change provider (google/openai/openrouter/local)"));
+      console.log(chalk.cyan("  /api <prov> <key>    : Save API Key (e.g., /api google AIza...)"));
+      console.log(chalk.cyan("  /undo                : Undo last file write or edit"));
+      console.log(chalk.cyan("  /session save [name] : Save current session memory"));
+      console.log(chalk.cyan("  /session load <name> : Load a saved session"));
+      console.log(chalk.cyan("  /session list        : List all saved sessions"));
+      console.log(chalk.cyan("  /clear               : Clear the console screen"));
+      console.log(chalk.cyan("  /exit                : Exit the application\n"));
+      continue;
+    }
+
+    if (input.startsWith("/undo")) {
+      const result = await undoLastChange();
+      if (result.success) {
+        console.log(chalk.green(`[ℹ] Undo successful: ${result.message}`));
+      } else {
+        console.log(chalk.yellow(`[ℹ] ${result.message}`));
+      }
+      continue;
+    }
+
+    if (input.startsWith("/session")) {
+      const parts = input.trim().split(/\s+/);
+      const subCommand = parts[1]?.toLowerCase();
+      const sessionName = parts[2];
+
+      if (subCommand === "save") {
+        const name = sessionName || `session_${Date.now()}`;
+        const res = await saveSession(name, memory, sessionState);
+        if (res.success) {
+          console.log(chalk.green(`[ℹ] ${res.message}`));
+        } else {
+          console.log(chalk.red(`[ℹ] ${res.message}`));
+        }
+      } else if (subCommand === "load") {
+        if (!sessionName) {
+          console.log(chalk.red("Invalid format! Use: /session load <name>"));
+        } else {
+          const res = await loadSession(sessionName);
+          if (res.success && res.data) {
+            memory = {
+              eli: res.data.memory?.eli || [],
+              rei: res.data.memory?.rei || [],
+              sora: res.data.memory?.sora || [],
+              rin: res.data.memory?.rin || [],
+            };
+            sessionState = {
+              filesTouched: new Set(res.data.sessionState?.filesTouched || []),
+            };
+            console.log(chalk.green(`[ℹ] ${res.message}`));
+          } else {
+            console.log(chalk.red(`[ℹ] ${res.message}`));
+          }
+        }
+      } else if (subCommand === "list") {
+        const sessions = await listSessions();
+        if (sessions.length === 0) {
+          console.log(chalk.gray("[ℹ] No saved sessions found."));
+        } else {
+          console.log(chalk.cyan("\nSaved Sessions:"));
+          sessions.forEach((s) => console.log(chalk.cyan(`  - ${s}`)));
+          console.log("");
+        }
+      } else {
+        console.log(chalk.red("Invalid session command! Use: /session save [name], /session load <name>, /session list"));
+      }
       continue;
     }
 

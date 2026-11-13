@@ -6,6 +6,7 @@ import * as readline from "readline/promises";
 import { exec } from "child_process";
 import { promisify } from "util";
 import chalk from "chalk";
+import { recordSnapshot } from "./undo.js";
 
 const execAsync = promisify(exec);
 
@@ -181,6 +182,7 @@ export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner:
     }
 
     try {
+      await recordSnapshot(filePath);
       await fs.mkdir(path.dirname(absolutePath), { recursive: true });
       await fs.writeFile(absolutePath, content, "utf-8");
       return `File successfully ${fileExists ? "overwritten" : "created"}: ${filePath}`;
@@ -249,6 +251,7 @@ export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: 
       }
       
       const newContent = normalizedContent.replace(normalizedTarget, replacementText);
+      await recordSnapshot(filePath);
       await fs.writeFile(absolutePath, newContent, "utf-8");
       
       return `File successfully edited. Replaced the specified text block in ${filePath}.`;
