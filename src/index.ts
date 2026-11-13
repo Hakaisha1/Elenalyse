@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { handleChat, startInteractiveChat, MemoryMode, MEMORY_LIMITS, trimMemory } from "./chat.js";
-import { setConfig, Provider } from "./config.js";
+import { setConfig, Provider, Config } from "./config.js";
 import { Persona, personas } from "./personas.js";
 
 export { MemoryMode, MEMORY_LIMITS, trimMemory };
@@ -84,6 +84,21 @@ configCmd
     }
     setConfig({ provider: p });
     console.log(chalk.green(`AI provider set to: ${p}`));
+  });
+
+configCmd
+  .command("fallback <name> [model]")
+  .description("Set fallback AI provider and optional model for failover")
+  .action((name: string, modelName?: string) => {
+    const p = name.toLowerCase() as Provider;
+    if (!["openrouter", "openai", "local", "google"].includes(p)) {
+      console.log(chalk.red(`Error: Unknown fallback provider '${p}'. Available: openrouter, openai, local, google.`));
+      process.exit(1);
+    }
+    const update: Partial<Config> = { fallbackProvider: p };
+    if (modelName) update.fallbackModel = modelName;
+    setConfig(update);
+    console.log(chalk.green(`Fallback AI provider set to: ${p}${modelName ? ` (${modelName})` : ""}`));
   });
 
 configCmd

@@ -8,7 +8,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import sound from "sound-play";
-import { getConfig, setConfig } from "./config.js";
+import { getConfig, setConfig, isFailoverError, executeWithFailover, Provider } from "./config.js";
+export { isFailoverError, executeWithFailover };
 import { getPersonaPrompt, getPersonaColor, PERSONA_SPEAKER_MAP } from "./personas.js";
 import { readFileTool, listDirTool, gitStatusTool, gitDiffTool, searchCodeTool, findFilesTool, createRunCommandTool, createWriteFileTool, createEditFileTool } from "./tools.js";
 import { ensureEngineDownloaded, ensureEngineRunning } from "./voiceEngine.js";
@@ -111,74 +112,94 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
   const spinner = ora(`Elenalyse (${activePersona.toUpperCase()}) is thinking...`).start();
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
+  let runProvider = provider;
+  let runModel = model;
+  let hasAttemptedFallback = false;
+
   try {
     const config = getConfig();
-    const aiClientFactory = await getAiClient(provider, model, config);
 
+    while (true) {
+      try {
+        const aiClientFactory = await getAiClient(runProvider, runModel, config);
 
-    const { text, toolCalls, toolResults, usage } = await generateText({
-      model: aiClientFactory,
-      system: systemPrompt,
-      prompt: message,
-      tools: {
-        readFile: readFileTool,
-        listDir: listDirTool,
-        gitStatus: gitStatusTool,
-        gitDiff: gitDiffTool,
-        searchCode: searchCodeTool,
-        findFiles: findFilesTool,
-        writeFile: createWriteFileTool(
-          () => spinner.stop(),
-          () => spinner.start(),
-          rl
-        ),
-        editFile: createEditFileTool(
-          () => spinner.stop(),
-          () => spinner.start(),
-          rl
-        ),
-        runCommand: createRunCommandTool(
-          () => spinner.stop(),
-          () => spinner.start(),
-          rl
-        )
-      },
-      // @ts-ignore
-      maxSteps: 5,
-    });
+        const { text, toolCalls, toolResults, usage } = await generateText({
+          model: aiClientFactory,
+          system: systemPrompt,
+          prompt: message,
+          tools: {
+            readFile: readFileTool,
+            listDir: listDirTool,
+            gitStatus: gitStatusTool,
+            gitDiff: gitDiffTool,
+            searchCode: searchCodeTool,
+            findFiles: findFilesTool,
+            writeFile: createWriteFileTool(
+              () => spinner.stop(),
+              () => spinner.start(),
+              rl
+            ),
+            editFile: createEditFileTool(
+              () => spinner.stop(),
+              () => spinner.start(),
+              rl
+            ),
+            runCommand: createRunCommandTool(
+              () => spinner.stop(),
+              () => spinner.start(),
+              rl
+            )
+          },
+          // @ts-ignore
+          maxSteps: 5,
+        });
 
-    spinner.stop();
-    
-    // Robust manual loop for AI SDK version / Provider compatibility issues
-    if (!text && toolCalls && toolCalls.length > 0 && toolResults && toolResults.length > 0) {
-      const toolSpinner = ora(`Evaluating ${toolCalls[0].toolName} results...`).start();
-      
-      const evaluationPrompt = `${message}\n\n[System: You called the tool "${toolCalls[0].toolName}" and received this result:\n${JSON.stringify((toolResults[0] as any).result || (toolResults[0] as any).output || "Success", null, 2)}\n\nPlease provide your final answer to the user based on this data. Do not output JSON, speak naturally.]`;
+        spinner.stop();
+        
+        // Robust manual loop for AI SDK version / Provider compatibility issues
+        if (!text && toolCalls && toolCalls.length > 0 && toolResults && toolResults.length > 0) {
+          const toolSpinner = ora(`Evaluating ${toolCalls[0].toolName} results...`).start();
+          
+          const evaluationPrompt = `${message}\n\n[System: You called the tool "${toolCalls[0].toolName}" and received this result:\n${JSON.stringify((toolResults[0] as any).result || (toolResults[0] as any).output || "Success", null, 2)}\n\nPlease provide your final answer to the user based on this data. Do not output JSON, speak naturally.]`;
 
-      const secondRun = await generateText({
-        model: aiClientFactory,
-        system: systemPrompt,
-        prompt: evaluationPrompt,
-      });
+          const secondRun = await generateText({
+            model: aiClientFactory,
+            system: systemPrompt,
+            prompt: evaluationPrompt,
+          });
 
-      toolSpinner.stop();
-      if (secondRun.usage) {
-        (usage as any).promptTokens += (secondRun.usage as any).promptTokens || 0;
-        (usage as any).completionTokens += (secondRun.usage as any).completionTokens || 0;
-      }
-      console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + secondRun.text);
-    } else {
-      console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + text);
-    }
+          toolSpinner.stop();
+          if (secondRun.usage) {
+            (usage as any).promptTokens += (secondRun.usage as any).promptTokens || 0;
+            (usage as any).completionTokens += (secondRun.usage as any).completionTokens || 0;
+          }
+          console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + secondRun.text);
+        } else {
+          console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + text);
+        }
 
-    console.log(chalk.gray(`\n[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]`));
+        console.log(chalk.gray(`\n[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]`));
 
-    if (voiceEnabled) {
-      await startBridgeServer();
-      let { displayText, voiceLines } = extractVoiceSegments(text, debug);
-      if (voiceLines.length > 0) {
-        const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
-        await playVoiceLines(voiceLines, speakerId);
+        if (voiceEnabled) {
+          await startBridgeServer();
+          let { displayText, voiceLines } = extractVoiceSegments(text, debug);
+          if (voiceLines.length > 0) {
+            const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
+            await playVoiceLines(voiceLines, speakerId);
+          }
+        }
+        break; // Successfully finished
+      } catch (innerError: any) {
+        if (!hasAttemptedFallback && config.fallbackProvider && config.fallbackProvider !== runProvider && isFailoverError(innerError)) {
+          hasAttemptedFallback = true;
+          spinner.stop();
+          console.log(chalk.yellow(`\n[Notice: Switched to fallback provider ${config.fallbackProvider} due to error]`));
+          runProvider = config.fallbackProvider;
+          runModel = config.fallbackModel || model;
+          spinner.start(`Elenalyse (${activePersona.toUpperCase()}) is retrying with ${runProvider}...`);
+          continue;
+        }
+        throw innerError;
       }
     }
   } catch (error: any) {
@@ -337,6 +358,9 @@ export async function startInteractiveChat(
     console.log(chalk.magenta.bold("✨ E L E N A L Y S E ✨"));
     console.log(chalk.magenta("==================================================="));
     console.log(chalk.gray(`[ℹ] Provider : ${provider}`));
+    if (config.fallbackProvider) {
+      console.log(chalk.gray(`[ℹ] Fallback : ${config.fallbackProvider}${config.fallbackModel ? ` (${config.fallbackModel})` : ""}`));
+    }
     console.log(chalk.gray(`[ℹ] Model    : ${model}`));
     console.log(chalk.gray(`[ℹ] Persona  : ${activePersona.toUpperCase()}`));
     console.log(chalk.gray(`[ℹ] Memory   : ${memoryMode} (${MEMORY_LIMITS[memoryMode]} messages)`));
@@ -406,6 +430,7 @@ export async function startInteractiveChat(
       console.log(chalk.cyan("  /persona <name>      : Change persona (eli/rei/sora/rin)"));
       console.log(chalk.cyan("  /model <name>        : Change model (e.g., gemini-3.5-flash-lite)"));
       console.log(chalk.cyan("  /provider <name>     : Change provider (google/openai/openrouter/local)"));
+      console.log(chalk.cyan("  /provider fallback <name> [model] : Set failover fallback provider"));
       console.log(chalk.cyan("  /api <prov> <key>    : Save API Key (e.g., /api google AIza...)"));
       console.log(chalk.cyan("  /undo                : Undo last file write or edit"));
       console.log(chalk.cyan("  /paste               : Enter multi-line paste mode (end with 'END')"));
@@ -503,6 +528,26 @@ export async function startInteractiveChat(
     }
 
     if (input.startsWith("/provider ")) {
+      const parts = input.trim().split(/\s+/);
+      if (parts[1]?.toLowerCase() === "fallback") {
+        const fbProvider = parts[2]?.toLowerCase() as Provider;
+        const fbModel = parts[3];
+        if (["google", "openai", "openrouter", "local"].includes(fbProvider)) {
+          config.fallbackProvider = fbProvider;
+          if (fbModel) config.fallbackModel = fbModel;
+          setConfig(config);
+          console.log(chalk.gray(`[ℹ] Fallback provider set to ${fbProvider}${fbModel ? ` (${fbModel})` : ""}`));
+        } else if (parts[2]?.toLowerCase() === "off" || parts[2]?.toLowerCase() === "none") {
+          delete config.fallbackProvider;
+          delete config.fallbackModel;
+          setConfig(config);
+          console.log(chalk.gray("[ℹ] Fallback provider disabled."));
+        } else {
+          console.log(chalk.red("Invalid fallback provider! Use: google, openai, openrouter, local (or 'off')"));
+        }
+        continue;
+      }
+
       const newProvider = input.split(" ")[1];
       if (["google", "openai", "openrouter", "local"].includes(newProvider?.toLowerCase())) {
         provider = newProvider.toLowerCase() as any;
@@ -602,152 +647,172 @@ export async function startInteractiveChat(
     };
     process.on("SIGINT", sigintHandler);
 
+    let runProvider = provider;
+    let runModel = model;
+    let hasAttemptedFallback = false;
+
     try {
-      const aiModel = await getAiClient(provider, model, config);
+      while (true) {
+        try {
+          const aiModel = await getAiClient(runProvider, runModel, config);
 
-      // Trim memory before sending to API
-      memory[activePersona] = trimMemory(memory[activePersona], memoryMode, debug);
+          // Trim memory before sending to API
+          memory[activePersona] = trimMemory(memory[activePersona], memoryMode, debug);
 
-      let previousToolCallsStr = "";
+          let previousToolCallsStr = "";
 
-      const result = streamText({
-        model: aiModel,
-        abortSignal: abortController.signal,
-        system: await getPersonaPrompt(activePersona, voiceEnabled),
-        messages: memory[activePersona],
-        tools: {
-          readFile: readFileTool,
-          listDir: listDirTool,
-          gitStatus: gitStatusTool,
-          gitDiff: gitDiffTool,
-          searchCode: searchCodeTool,
-          findFiles: findFilesTool,
-          writeFile: createWriteFileTool(
-            () => spinner.stop(),
-            () => spinner.start(),
-            rl
-          ),
-          editFile: createEditFileTool(
-            () => spinner.stop(),
-            () => spinner.start(),
-            rl
-          ),
-          runCommand: createRunCommandTool(
-            () => spinner.stop(),
-            () => spinner.start(),
-            rl
-          )
-        },
-        // @ts-ignore
-        maxSteps: 5,
-        onStepFinish: (event) => {
-          if (debug) {
-            console.log(chalk.gray(`\n[DEBUG] Step completed. Reason: ${event.finishReason}`));
-            if (event.text) console.log(chalk.gray(`[DEBUG] Text generated so far: ${event.text.length} chars`));
-            if (event.toolCalls && event.toolCalls.length > 0) {
-              event.toolCalls.forEach(tc => {
-                 console.log(chalk.magenta(`[DEBUG] AI called tool: ${tc.toolName}`));
-                 console.log(chalk.gray(`[DEBUG] Args: ${JSON.stringify((tc as any).args)}`));
-              });
-            }
-          }
-          if (event.toolCalls && event.toolCalls.length > 0) {
-            const currentToolCallsStr = JSON.stringify(event.toolCalls.map(tc => ({ name: tc.toolName, args: (tc as any).args })));
-            if (currentToolCallsStr === previousToolCallsStr) {
-              console.log(chalk.red(`\n[ERROR] Agent Loop Detected! Repeated identical tool call: ${event.toolCalls[0].toolName}. Aborting.`));
-              throw new Error(`Agent loop detected: ${event.toolCalls[0].toolName} called with identical arguments twice in a row.`);
-            }
-            previousToolCallsStr = currentToolCallsStr;
+          const result = streamText({
+            model: aiModel,
+            abortSignal: abortController.signal,
+            system: await getPersonaPrompt(activePersona, voiceEnabled),
+            messages: memory[activePersona],
+            tools: {
+              readFile: readFileTool,
+              listDir: listDirTool,
+              gitStatus: gitStatusTool,
+              gitDiff: gitDiffTool,
+              searchCode: searchCodeTool,
+              findFiles: findFilesTool,
+              writeFile: createWriteFileTool(
+                () => spinner.stop(),
+                () => spinner.start(),
+                rl
+              ),
+              editFile: createEditFileTool(
+                () => spinner.stop(),
+                () => spinner.start(),
+                rl
+              ),
+              runCommand: createRunCommandTool(
+                () => spinner.stop(),
+                () => spinner.start(),
+                rl
+              )
+            },
+            // @ts-ignore
+            maxSteps: 5,
+            onStepFinish: (event) => {
+              if (debug) {
+                console.log(chalk.gray(`\n[DEBUG] Step completed. Reason: ${event.finishReason}`));
+                if (event.text) console.log(chalk.gray(`[DEBUG] Text generated so far: ${event.text.length} chars`));
+                if (event.toolCalls && event.toolCalls.length > 0) {
+                  event.toolCalls.forEach(tc => {
+                     console.log(chalk.magenta(`[DEBUG] AI called tool: ${tc.toolName}`));
+                     console.log(chalk.gray(`[DEBUG] Args: ${JSON.stringify((tc as any).args)}`));
+                  });
+                }
+              }
+              if (event.toolCalls && event.toolCalls.length > 0) {
+                const currentToolCallsStr = JSON.stringify(event.toolCalls.map(tc => ({ name: tc.toolName, args: (tc as any).args })));
+                if (currentToolCallsStr === previousToolCallsStr) {
+                  console.log(chalk.red(`\n[ERROR] Agent Loop Detected! Repeated identical tool call: ${event.toolCalls[0].toolName}. Aborting.`));
+                  throw new Error(`Agent loop detected: ${event.toolCalls[0].toolName} called with identical arguments twice in a row.`);
+                }
+                previousToolCallsStr = currentToolCallsStr;
 
-            // Track files touched for handoff context
-            for (const tc of event.toolCalls) {
-              const args = (tc as any).args;
-              const filePath = args?.filePath || args?.path || args?.file || args?.filename || args?.dirPath;
-              if (filePath && typeof filePath === "string") {
-                sessionState.filesTouched.add(filePath);
+                // Track files touched for handoff context
+                for (const tc of event.toolCalls) {
+                  const args = (tc as any).args;
+                  const filePath = args?.filePath || args?.path || args?.file || args?.filename || args?.dirPath;
+                  if (filePath && typeof filePath === "string") {
+                    sessionState.filesTouched.add(filePath);
+                  }
+                }
               }
             }
-          }
-        }
-      });
-
-      // Stream text to terminal in real-time
-      let headerPrinted = false;
-      let fullText = "";
-
-      for await (const chunk of result.textStream) {
-        if (!headerPrinted) {
-          spinner.stop();
-          process.stdout.write(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `));
-          headerPrinted = true;
-        }
-        process.stdout.write(chunk);
-        fullText += chunk;
-      }
-
-      // Wait for the full result to finalize (tool calls, usage, etc.)
-      const finalResult = await result.response;
-      const usage = await result.usage;
-      const steps = await result.steps;
-
-      // If no text was streamed (tool-only response), do a follow-up generateText
-      if (!fullText && steps && steps.length > 0) {
-        const lastStep = steps[steps.length - 1];
-        if (lastStep.toolCalls && lastStep.toolCalls.length > 0) {
-          spinner.stop();
-          const toolSpinner = ora(`Evaluating ${lastStep.toolCalls[0].toolName} results...`).start();
-
-          const evaluationMessages = [...memory[activePersona]];
-          if (finalResult && finalResult.messages) {
-            evaluationMessages.push(...finalResult.messages);
-          }
-
-          const secondRun = await generateText({
-            model: aiModel,
-            system: await getPersonaPrompt(activePersona, voiceEnabled),
-            messages: evaluationMessages,
           });
-          toolSpinner.stop();
-          fullText = secondRun.text;
 
-          process.stdout.write(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + fullText);
+          // Stream text to terminal in real-time
+          let headerPrinted = false;
+          let fullText = "";
+
+          for await (const chunk of result.textStream) {
+            if (!headerPrinted) {
+              spinner.stop();
+              process.stdout.write(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `));
+              headerPrinted = true;
+            }
+            process.stdout.write(chunk);
+            fullText += chunk;
+          }
+
+          // Wait for the full result to finalize (tool calls, usage, etc.)
+          const finalResult = await result.response;
+          const usage = await result.usage;
+          const steps = await result.steps;
+
+          // If no text was streamed (tool-only response), do a follow-up generateText
+          if (!fullText && steps && steps.length > 0) {
+            const lastStep = steps[steps.length - 1];
+            if (lastStep.toolCalls && lastStep.toolCalls.length > 0) {
+              spinner.stop();
+              const toolSpinner = ora(`Evaluating ${lastStep.toolCalls[0].toolName} results...`).start();
+
+              const evaluationMessages = [...memory[activePersona]];
+              if (finalResult && finalResult.messages) {
+                evaluationMessages.push(...finalResult.messages);
+              }
+
+              const secondRun = await generateText({
+                model: aiModel,
+                system: await getPersonaPrompt(activePersona, voiceEnabled),
+                messages: evaluationMessages,
+              });
+              toolSpinner.stop();
+              fullText = secondRun.text;
+
+              process.stdout.write(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + fullText);
+            }
+          }
+
+          if (!headerPrinted) spinner.stop();
+          process.stdout.write("\n");
+
+          if (steps && steps.length >= 5) {
+            console.log(chalk.yellow(`[WARNING] Max steps (5) reached. The AI was forcefully stopped.`));
+          }
+
+          // Save to memory
+          if (finalResult && finalResult.messages) {
+            memory[activePersona].push(...sanitizeForMemory(finalResult.messages));
+          } else {
+            memory[activePersona].push({ role: "assistant", content: stripVoiceTags(fullText) });
+          }
+
+          let { displayText, voiceLines } = extractVoiceSegments(fullText, debug);
+          // displayText already printed via stream, only show token usage
+          console.log(chalk.gray(`[Token Usage: ${(usage as any)?.promptTokens || 0} input / ${(usage as any)?.completionTokens || 0} output]`));
+
+          if (debug) {
+            console.log(chalk.gray(`[DEBUG] Memory (${memory[activePersona].length} messages):`));
+            memory[activePersona].forEach((m: any, i: number) => {
+              const preview = typeof m.content === "string" 
+                ? m.content.slice(0, 80).replace(/\n/g, "\\n") 
+                : `[${Array.isArray(m.content) ? m.content.length + " parts" : typeof m.content}]`;
+              console.log(chalk.gray(`  [${i}] ${m.role}: ${preview}${typeof m.content === "string" && m.content.length > 80 ? "..." : ""}`));
+            });
+          }
+          console.log("");
+
+          if (voiceEnabled && voiceLines.length > 0) {
+            const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
+            playVoiceLines(voiceLines, speakerId); // Fire and forget
+          }
+
+          break; // Successfully finished turn
+        } catch (innerError: any) {
+          if (!isAborted && !hasAttemptedFallback && config.fallbackProvider && config.fallbackProvider !== runProvider && isFailoverError(innerError)) {
+            hasAttemptedFallback = true;
+            spinner.stop();
+            console.log(chalk.yellow(`\n[Notice: Switched to fallback provider ${config.fallbackProvider} due to error]`));
+            runProvider = config.fallbackProvider;
+            runModel = config.fallbackModel || model;
+            spinner.start(`Elenalyse (${activePersona.toUpperCase()}) is retrying with ${runProvider}...`);
+            continue;
+          }
+          throw innerError;
         }
       }
-
-      if (!headerPrinted) spinner.stop();
-      process.stdout.write("\n");
-
-      if (steps && steps.length >= 5) {
-        console.log(chalk.yellow(`[WARNING] Max steps (5) reached. The AI was forcefully stopped.`));
-      }
-
-      // Save to memory
-      if (finalResult && finalResult.messages) {
-        memory[activePersona].push(...sanitizeForMemory(finalResult.messages));
-      } else {
-        memory[activePersona].push({ role: "assistant", content: stripVoiceTags(fullText) });
-      }
-
-      let { displayText, voiceLines } = extractVoiceSegments(fullText, debug);
-      // displayText already printed via stream, only show token usage
-      console.log(chalk.gray(`[Token Usage: ${(usage as any)?.promptTokens || 0} input / ${(usage as any)?.completionTokens || 0} output]`));
-
-      if (debug) {
-        console.log(chalk.gray(`[DEBUG] Memory (${memory[activePersona].length} messages):`));
-        memory[activePersona].forEach((m: any, i: number) => {
-          const preview = typeof m.content === "string" 
-            ? m.content.slice(0, 80).replace(/\n/g, "\\n") 
-            : `[${Array.isArray(m.content) ? m.content.length + " parts" : typeof m.content}]`;
-          console.log(chalk.gray(`  [${i}] ${m.role}: ${preview}${typeof m.content === "string" && m.content.length > 80 ? "..." : ""}`));
-        });
-      }
-      console.log("");
-
-      if (voiceEnabled && voiceLines.length > 0) {
-        const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
-        playVoiceLines(voiceLines, speakerId); // Fire and forget
-      }
-
     } catch (error: any) {
       spinner.stop();
       if (isAborted || abortController.signal.aborted || error.name === "AbortError" || error.message?.includes("aborted")) {

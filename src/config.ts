@@ -11,7 +11,56 @@ export interface Config {
   activePersona: Persona;
   provider: Provider;
   model: string;
+  fallbackProvider?: Provider;
+  fallbackModel?: string;
   apiKeys?: Record<string, string>;
+}
+
+export function isFailoverError(error: any): boolean {
+  if (!error) return false;
+  const status = error.status || error.statusCode || error.response?.status;
+  if (status === 429 || status === 503 || status === 502 || status === 504) return true;
+
+  const msg = String(error.message || "").toLowerCase();
+  return (
+    msg.includes("429") ||
+    msg.includes("rate limit") ||
+    msg.includes("quota") ||
+    msg.includes("resource_exhausted") ||
+    msg.includes("503") ||
+    msg.includes("overloaded") ||
+    msg.includes("network") ||
+    msg.includes("fetch failed") ||
+    msg.includes("econnrefused") ||
+    msg.includes("econnreset") ||
+    msg.includes("enotfound") ||
+    msg.includes("timed out") ||
+    msg.includes("timeout")
+  );
+}
+
+export async function executeWithFailover<T>(
+  action: (provider: Provider, model: string) => Promise<T>,
+  primaryProvider: Provider,
+  primaryModel: string,
+  fallbackProvider?: Provider,
+  fallbackModel?: string,
+  onFailover?: (fallbackProvider: Provider, error: any) => void
+): Promise<{ result: T; usedProvider: Provider; usedModel: string }> {
+  try {
+    const result = await action(primaryProvider, primaryModel);
+    return { result, usedProvider: primaryProvider, usedModel: primaryModel };
+  } catch (error: any) {
+    if (fallbackProvider && fallbackProvider !== primaryProvider && isFailoverError(error)) {
+      const fbModel = fallbackModel || primaryModel;
+      if (onFailover) {
+        onFailover(fallbackProvider, error);
+      }
+      const result = await action(fallbackProvider, fbModel);
+      return { result, usedProvider: fallbackProvider, usedModel: fbModel };
+    }
+    throw error;
+  }
 }
 
 const defaultConfig: Config = {
