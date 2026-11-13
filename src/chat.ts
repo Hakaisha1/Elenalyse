@@ -258,6 +258,37 @@ ${recentSummary}
 [CRITICAL INSTRUCTION: You MUST reply in the same language the user was using in the context above (e.g., if the user spoke Indonesian, you must reply in Indonesian). Do not switch to English just because this system note is in English.]`;
 }
 
+export function collectPasteLines(lines: string[]): { action: "submit" | "cancel" | "empty"; text?: string } {
+  const buffer: string[] = [];
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (trimmed.toUpperCase() === "CANCEL") {
+      return { action: "cancel" };
+    }
+    if (trimmed.toUpperCase() === "END") {
+      const text = buffer.join("\n").trim();
+      return text ? { action: "submit", text } : { action: "empty" };
+    }
+    buffer.push(rawLine);
+  }
+  const text = buffer.join("\n").trim();
+  return text ? { action: "submit", text } : { action: "empty" };
+}
+
+export function popLastTurnForRetry(messages: any[]): { success: boolean; lastUserMessage?: string } {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return { success: false };
+  }
+  while (messages.length > 0 && messages[messages.length - 1].role !== "user") {
+    messages.pop();
+  }
+  if (messages.length > 0 && messages[messages.length - 1].role === "user") {
+    const userMsg = messages.pop();
+    return { success: true, lastUserMessage: typeof userMsg.content === "string" ? userMsg.content : "" };
+  }
+  return { success: false };
+}
+
 export type MemoryMode = "default" | "amnesia" | "focus";
 
 export const MEMORY_LIMITS: Record<MemoryMode, number> = {
@@ -353,6 +384,7 @@ export async function startInteractiveChat(
   
   let sessionState: SessionState = { filesTouched: new Set() };
   let oldPersonaNameForHandoff = "";
+  let lastUserPrompt = "";
 
   while (true) {
     const input = await rl.question(chalk.green("👤 You ❯ "));
@@ -376,6 +408,8 @@ export async function startInteractiveChat(
       console.log(chalk.cyan("  /provider <name>     : Change provider (google/openai/openrouter/local)"));
       console.log(chalk.cyan("  /api <prov> <key>    : Save API Key (e.g., /api google AIza...)"));
       console.log(chalk.cyan("  /undo                : Undo last file write or edit"));
+      console.log(chalk.cyan("  /paste               : Enter multi-line paste mode (end with 'END')"));
+      console.log(chalk.cyan("  /retry               : Retry the last prompt"));
       console.log(chalk.cyan("  /session save [name] : Save current session memory"));
       console.log(chalk.cyan("  /session load <name> : Load a saved session"));
       console.log(chalk.cyan("  /session list        : List all saved sessions"));
@@ -515,6 +549,41 @@ export async function startInteractiveChat(
 
     let finalInput = input;
 
+    if (input.trim() === "/paste") {
+      console.log(chalk.cyan("\n📋 Entering Multi-line Paste Mode."));
+      console.log(chalk.gray("Paste your text below. Type 'END' on a new line to submit, or 'CANCEL' to abort.\n"));
+      const pasteLines: string[] = [];
+      while (true) {
+        const line = await rl.question(chalk.gray("... "));
+        if (line.trim().toUpperCase() === "CANCEL") {
+          console.log(chalk.yellow("[ℹ] Paste cancelled."));
+          pasteLines.length = 0;
+          break;
+        }
+        if (line.trim().toUpperCase() === "END") {
+          break;
+        }
+        pasteLines.push(line);
+      }
+      if (pasteLines.length === 0) continue;
+      finalInput = pasteLines.join("\n");
+      console.log(chalk.gray(`[ℹ] Captured ${pasteLines.length} lines.`));
+    } else if (input.trim() === "/retry") {
+      if (!lastUserPrompt) {
+        console.log(chalk.yellow("[ℹ] No previous message to retry."));
+        continue;
+      }
+      const popRes = popLastTurnForRetry(memory[activePersona]);
+      if (!popRes.success) {
+        console.log(chalk.yellow("[ℹ] No previous turn found to retry."));
+        continue;
+      }
+      finalInput = lastUserPrompt;
+      console.log(chalk.cyan(`[ℹ] Retrying: "${finalInput.length > 50 ? finalInput.slice(0, 50) + "..." : finalInput}"`));
+    }
+
+    lastUserPrompt = finalInput;
+
     memory[activePersona].push({ role: "user", content: finalInput });
 
     const colorName = getPersonaColor(activePersona) as keyof typeof chalk;
@@ -523,6 +592,15 @@ export async function startInteractiveChat(
 
     // Pause rl to avoid stdin conflicts with runCommandTool
     rl.pause();
+
+    const abortController = new AbortController();
+    let isAborted = false;
+
+    const sigintHandler = () => {
+      isAborted = true;
+      abortController.abort();
+    };
+    process.on("SIGINT", sigintHandler);
 
     try {
       const aiModel = await getAiClient(provider, model, config);
@@ -534,6 +612,7 @@ export async function startInteractiveChat(
 
       const result = streamText({
         model: aiModel,
+        abortSignal: abortController.signal,
         system: await getPersonaPrompt(activePersona, voiceEnabled),
         messages: memory[activePersona],
         tools: {
@@ -671,10 +750,15 @@ export async function startInteractiveChat(
 
     } catch (error: any) {
       spinner.stop();
-      console.log(chalk.red("\n✖ Failed to get response from AI engine."));
-      console.log(chalk.red(error.message));
+      if (isAborted || abortController.signal.aborted || error.name === "AbortError" || error.message?.includes("aborted")) {
+        console.log(chalk.yellow("\n⚠️ Generation aborted by user."));
+      } else {
+        console.log(chalk.red("\n✖ Failed to get response from AI engine."));
+        console.log(chalk.red(error.message));
+      }
       memory[activePersona].pop(); // Revert user message so they can retry
     } finally {
+      process.off("SIGINT", sigintHandler);
       rl.resume();
     }
   }
