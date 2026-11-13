@@ -252,19 +252,43 @@ ${recentSummary}
 [CRITICAL INSTRUCTION: You MUST reply in the same language the user was using in the context above (e.g., if the user spoke Indonesian, you must reply in Indonesian). Do not switch to English just because this system note is in English.]`;
 }
 
-const MAX_MEMORY_MESSAGES = 40;
+export type MemoryMode = "default" | "amnesia" | "focus";
 
-function trimMemory(memory: any[], debug: boolean = false): any[] {
-  if (memory.length <= MAX_MEMORY_MESSAGES) return memory;
-  const trimCount = memory.length - MAX_MEMORY_MESSAGES;
-  if (debug) {
-    console.log(chalk.gray(`[DEBUG] Memory trimmed: removed ${trimCount} oldest messages (${memory.length} → ${MAX_MEMORY_MESSAGES})`));
+export const MEMORY_LIMITS: Record<MemoryMode, number> = {
+  amnesia: 10,
+  default: 40,
+  focus: 100,
+};
+
+export function trimMemory(
+  memory: any[],
+  modeOrDebug?: MemoryMode | boolean,
+  debug: boolean = false
+): any[] {
+  let mode: MemoryMode = "default";
+  let isDebug = debug;
+
+  if (typeof modeOrDebug === "boolean") {
+    isDebug = modeOrDebug;
+  } else if (modeOrDebug && typeof modeOrDebug === "string") {
+    mode = modeOrDebug;
+  }
+
+  const limit = MEMORY_LIMITS[mode] ?? MEMORY_LIMITS.default;
+  if (!Array.isArray(memory) || memory.length <= limit) return memory;
+  const trimCount = memory.length - limit;
+  if (isDebug) {
+    console.log(chalk.gray(`[DEBUG] Memory trimmed: removed ${trimCount} oldest messages (${memory.length} → ${limit})`));
   }
   // Keep the most recent messages, drop the oldest
   return memory.slice(trimCount);
 }
 
-export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean = false) {
+export async function startInteractiveChat(
+  voiceEnabled: boolean = false,
+  debug: boolean = false,
+  memoryMode: MemoryMode = "default"
+) {
   let config = getConfig();
   let activePersona = config.activePersona;
   let provider = config.provider;
@@ -278,6 +302,7 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
     console.log(chalk.gray(`[ℹ] Provider : ${provider}`));
     console.log(chalk.gray(`[ℹ] Model    : ${model}`));
     console.log(chalk.gray(`[ℹ] Persona  : ${activePersona.toUpperCase()}`));
+    console.log(chalk.gray(`[ℹ] Memory   : ${memoryMode} (${MEMORY_LIMITS[memoryMode]} messages)`));
     console.log(chalk.gray("---------------------------------------------------"));
     console.log(chalk.cyan("Type your message below. Type '/help' to see the list of commands."));
     console.log(chalk.magenta("===================================================\n"));
@@ -435,7 +460,7 @@ export async function startInteractiveChat(voiceEnabled: boolean, debug: boolean
       const aiModel = await getAiClient(provider, model, config);
 
       // Trim memory before sending to API
-      memory[activePersona] = trimMemory(memory[activePersona], debug);
+      memory[activePersona] = trimMemory(memory[activePersona], memoryMode, debug);
 
       let previousToolCallsStr = "";
 

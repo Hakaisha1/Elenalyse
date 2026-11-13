@@ -1,8 +1,10 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { handleChat, startInteractiveChat } from "./chat.js";
+import { handleChat, startInteractiveChat, MemoryMode, MEMORY_LIMITS, trimMemory } from "./chat.js";
 import { setConfig, Provider } from "./config.js";
 import { Persona, personas } from "./personas.js";
+
+export { MemoryMode, MEMORY_LIMITS, trimMemory };
 
 const program = new Command();
 
@@ -16,8 +18,16 @@ program
   .description("Start the interactive Elenalyse REPL chat")
   .option("-v, --voice", "Enable TTS voice response")
   .option("-d, --debug", "Show hidden voice tags in CLI for debugging")
+  .option("--amnesia", "Trim memory to 10 messages for low-token models")
+  .option("--focus", "Allow up to 100 messages for extended context")
   .action(async (options) => {
-    await startInteractiveChat(options.voice, options.debug);
+    let memoryMode: MemoryMode = "default";
+    if (options.amnesia) {
+      memoryMode = "amnesia";
+    } else if (options.focus) {
+      memoryMode = "focus";
+    }
+    await startInteractiveChat(options.voice, options.debug, memoryMode);
   });
 
 program
@@ -26,11 +36,19 @@ program
   .argument("[message]", "The message to send to the assistant")
   .option("-v, --voice", "Enable TTS voice response")
   .option("-d, --debug", "Show hidden voice tags in CLI for debugging")
+  .option("--amnesia", "Trim memory to 10 messages for low-token models")
+  .option("--focus", "Allow up to 100 messages for extended context")
   .action(async (message, options) => {
+    let memoryMode: MemoryMode = "default";
+    if (options.amnesia) {
+      memoryMode = "amnesia";
+    } else if (options.focus) {
+      memoryMode = "focus";
+    }
     if (message) {
       await handleChat(message, options.voice, options.debug);
     } else {
-      await startInteractiveChat(options.voice, options.debug);
+      await startInteractiveChat(options.voice, options.debug, memoryMode);
     }
   });
 
