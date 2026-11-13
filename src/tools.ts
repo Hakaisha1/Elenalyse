@@ -130,6 +130,185 @@ export const gitDiffTool = tool({
   },
 });
 
+const IGNORED_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "target",
+  ".vscode",
+  ".idea",
+]);
+
+export function matchesPattern(filename: string, pattern: string): boolean {
+  if (!pattern || pattern === "*") return true;
+  const basename = path.basename(filename);
+  if (pattern.includes("*") || pattern.includes("?")) {
+    const escaped = pattern
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, ".*")
+      .replace(/\?/g, ".");
+    const regex = new RegExp(`^${escaped}$`, "i");
+    return regex.test(filename) || regex.test(basename);
+  }
+  return (
+    filename.toLowerCase().includes(pattern.toLowerCase()) ||
+    basename.toLowerCase().includes(pattern.toLowerCase())
+  );
+}
+
+async function collectFiles(
+  dir: string,
+  baseDir: string = dir,
+  results: string[] = []
+): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (!IGNORED_DIRS.has(entry.name)) {
+          await collectFiles(path.join(dir, entry.name), baseDir, results);
+        }
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if (!BINARY_EXTENSIONS.has(ext)) {
+          const fullPath = path.join(dir, entry.name);
+          const relPath = path.relative(baseDir, fullPath).replace(/\\/g, "/");
+          results.push(relPath);
+        }
+      }
+    }
+  } catch {}
+  return results;
+}
+
+export interface SearchMatch {
+  filePath: string;
+  line: number;
+  snippet: string;
+}
+
+export async function searchCode(
+  query: string,
+  options?: { isRegex?: boolean; filePattern?: string; rootDir?: string }
+): Promise<SearchMatch[]> {
+  const rootDir = options?.rootDir || process.cwd();
+  const allFiles = await collectFiles(rootDir, rootDir);
+  const matches: SearchMatch[] = [];
+
+  let regex: RegExp;
+  if (options?.isRegex) {
+    try {
+      regex = new RegExp(query, "i");
+    } catch {
+      regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    }
+  } else {
+    regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  }
+
+  for (const relPath of allFiles) {
+    if (options?.filePattern && !matchesPattern(relPath, options.filePattern)) {
+      continue;
+    }
+
+    const fullPath = path.resolve(rootDir, relPath);
+    try {
+      const stat = await fs.stat(fullPath);
+      if (stat.size > MAX_FILE_SIZE) continue;
+
+      const content = await fs.readFile(fullPath, "utf-8");
+      const lines = content.split(/\r?\n/);
+
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          matches.push({
+            filePath: relPath,
+            line: i + 1,
+            snippet: lines[i].trim(),
+          });
+          if (matches.length >= 50) return matches;
+        }
+      }
+    } catch {}
+  }
+
+  return matches;
+}
+
+export async function findFiles(
+  pattern: string,
+  rootDir: string = process.cwd()
+): Promise<string[]> {
+  const allFiles = await collectFiles(rootDir, rootDir);
+  const matches = allFiles.filter((relPath) => matchesPattern(relPath, pattern));
+  return matches.slice(0, 100);
+}
+
+export const searchCodeTool = tool({
+  description: "Fast recursive search for text or regex across files in the current workspace. Ignores build and node_modules directories.",
+  parameters: z.object({
+    query: z.string().describe("The text or regex to search for"),
+    isRegex: z.boolean().optional().describe("Whether to treat the query as a regular expression"),
+    filePattern: z.string().optional().describe("Optional glob or pattern to filter files, e.g. '*.ts' or 'src/*'"),
+  }).passthrough(),
+  // @ts-ignore
+  execute: async (args: any) => {
+    try {
+      const query = args?.query || args?.search || args?.text;
+      if (!query) return "Error: query parameter is required.";
+
+      const matches = await searchCode(query, {
+        isRegex: Boolean(args?.isRegex),
+        filePattern: args?.filePattern || args?.pattern,
+      });
+
+      if (matches.length === 0) {
+        return `No matches found for '${query}'.`;
+      }
+
+      const formatted = matches
+        .map((m) => `${m.filePath}:${m.line}: ${m.snippet}`)
+        .join("\n");
+
+      if (formatted.length > MAX_OUTPUT_CHARS) {
+        return formatted.slice(0, MAX_OUTPUT_CHARS) + `\n...[Output truncated. Total matches: ${matches.length}]`;
+      }
+
+      return formatted;
+    } catch (err: any) {
+      return `Error searching code: ${err.message}`;
+    }
+  },
+});
+
+export const findFilesTool = tool({
+  description: "Find files by filename or glob pattern (e.g. '*.test.ts', '*config*'). Ignores node_modules, git, and dist directories.",
+  parameters: z.object({
+    pattern: z.string().describe("The glob or substring pattern to match files against, e.g. '*.ts' or '*config*'"),
+  }).passthrough(),
+  // @ts-ignore
+  execute: async (args: any) => {
+    try {
+      const pattern = args?.pattern || args?.glob || args?.file || "*";
+      const files = await findFiles(pattern);
+
+      if (files.length === 0) {
+        return `No files found matching '${pattern}'.`;
+      }
+
+      const formatted = files.join("\n");
+      if (formatted.length > MAX_OUTPUT_CHARS) {
+        return formatted.slice(0, MAX_OUTPUT_CHARS) + `\n...[Output truncated. Total files: ${files.length}]`;
+      }
+
+      return formatted;
+    } catch (err: any) {
+      return `Error finding files: ${err.message}`;
+    }
+  },
+});
+
 export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner: () => void, rlInterface?: any) => {
   const isWindows = process.platform === "win32";
   const osContext = isWindows 

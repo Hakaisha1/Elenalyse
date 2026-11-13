@@ -14,9 +14,38 @@ export const personas: Record<Persona, string> = {
   rin: "You are RIN, a Tsundere. You are strict, merciless, and relentless. Focus on code audits, security checks, and error detection. Be harsh but ultimately helpful."
 };
 
+export function getProjectContext(rootDir: string = process.cwd()): string {
+  const elenalyseMdPath = path.join(rootDir, "ELENALYSE.md");
+  try {
+    if (fs.existsSync(elenalyseMdPath)) {
+      const content = fs.readFileSync(elenalyseMdPath, "utf-8");
+      const capped = content.slice(0, 2048);
+      return `[PROJECT CONTEXT (from ELENALYSE.md)]\n${capped}`;
+    }
+  } catch {}
+
+  const pkgJsonPath = path.join(rootDir, "package.json");
+  try {
+    if (fs.existsSync(pkgJsonPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"));
+      const name = pkg.name || "unnamed";
+      const desc = pkg.description ? ` - ${pkg.description}` : "";
+      const scripts = pkg.scripts ? JSON.stringify(pkg.scripts, null, 2) : "{}";
+      return `[PROJECT CONTEXT (from package.json)]\nProject: ${name}${desc}\nScripts:\n${scripts}`;
+    }
+  } catch {}
+
+  return "";
+}
+
 export async function getPersonaPrompt(persona: Persona, voiceEnabled: boolean = false): Promise<string> {
   let basePrompt = personas[persona] || personas.eli;
   basePrompt += "\n\n[SYSTEM DIRECTIVE: TOOL USAGE]\nIf the user asks you to create, write, or generate a file, you MUST ALWAYS use the `writeFile` tool to do it instead of outputting markdown code blocks in chat. If the user asks you to edit or modify a file, you MUST ALWAYS use the `editFile` tool. Outputting code blocks without using these tools when explicitly asked to write a file is STRICTLY PROHIBITED.";
+
+  const projectContext = getProjectContext();
+  if (projectContext) {
+    basePrompt += `\n\n${projectContext}`;
+  }
 
   // Calculate the root of the elenalyse package (parent of 'dist')
   const packageRoot = path.join(__dirname, "..");
