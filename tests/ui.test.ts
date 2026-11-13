@@ -245,6 +245,48 @@ describe("Modern UI / UX Suite", () => {
         })
       ).toBe("/session load my-session");
     });
+
+    it("dismisses dropdown when input does not match any valid slash command", () => {
+      expect(getContextualSuggestions("/coba").items).toEqual([]);
+      expect(getContextualSuggestions("/coba cari celah").items).toEqual([]);
+      expect(getContextualSuggestions("/xyz").items).toEqual([]);
+      expect(getContextualSuggestions("/unknown command").items).toEqual([]);
+    });
+
+    it("suppresses dropdown on trailing space when command arguments are already supplied", () => {
+      // /persona takes 1 arg
+      expect(getContextualSuggestions("/persona eli ").items).toEqual([]);
+      expect(getContextualSuggestions("/persona eli extra text").items).toEqual([]);
+
+      // /setting sub-commands
+      expect(getContextualSuggestions("/setting memory amnesia ").items).toEqual([]);
+      expect(getContextualSuggestions("/setting steps 25 ").items).toEqual([]);
+      expect(getContextualSuggestions("/setting voice on ").items).toEqual([]);
+      expect(getContextualSuggestions("/setting show ").items).toEqual([]);
+
+      // /provider takes 1 arg (non-fallback) and 2 args (fallback)
+      expect(getContextualSuggestions("/provider google ").items).toEqual([]);
+      expect(getContextualSuggestions("/provider fallback google ").items).toEqual([]);
+
+      // /api provider typed -> next is secret key
+      expect(getContextualSuggestions("/api google ").items).toEqual([]);
+
+      // /session sub-commands
+      expect(getContextualSuggestions("/session save ").items).toEqual([]);
+      expect(getContextualSuggestions("/session load mysession ").items).toEqual([]);
+      expect(getContextualSuggestions("/session list ").items).toEqual([]);
+
+      // /model takes 1 arg
+      expect(getContextualSuggestions("/model gpt-4o ").items).toEqual([]);
+
+      // Zero-arg commands
+      expect(getContextualSuggestions("/help ").items).toEqual([]);
+      expect(getContextualSuggestions("/clear ").items).toEqual([]);
+      expect(getContextualSuggestions("/exit ").items).toEqual([]);
+      expect(getContextualSuggestions("/undo ").items).toEqual([]);
+      expect(getContextualSuggestions("/retry ").items).toEqual([]);
+      expect(getContextualSuggestions("/paste ").items).toEqual([]);
+    });
   });
 
   describe("English-First Metadata Verification", () => {

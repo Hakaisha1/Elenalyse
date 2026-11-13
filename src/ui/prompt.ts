@@ -96,20 +96,14 @@ export async function interactivePrompt(
 
     const clearDropdown = () => {
       if (previousDropdownHeight > 0) {
-        for (let i = 0; i < previousDropdownHeight; i++) {
-          stdout.write("\n\x1b[2K");
-        }
-        stdout.write(`\x1b[${previousDropdownHeight}A`);
+        stdout.write("\x1b[s\x1b[1B\x1b[J\x1b[u");
         previousDropdownHeight = 0;
       }
     };
 
     const render = () => {
-      clearDropdown();
-
       // Redraw prompt line
-      stdout.write("\r\x1b[2K");
-      stdout.write(promptPrefix + buffer);
+      stdout.write("\r\x1b[2K" + promptPrefix + buffer);
 
       if (dropdownActive && filtered.length > 0) {
         const dropdownLines = renderDropdownLines(
@@ -119,12 +113,13 @@ export async function interactivePrompt(
         );
         previousDropdownHeight = dropdownLines.length;
 
-        stdout.write("\n" + dropdownLines.join("\n"));
-        // Move cursor back up to the prompt line and to the correct column
-        stdout.write(`\x1b[${dropdownLines.length}A`);
+        stdout.write("\x1b[s");
+        stdout.write("\n" + dropdownLines.join("\n") + "\x1b[J");
+        stdout.write("\x1b[u");
         stdout.write(`\r\x1b[${promptLen + cursor}C`);
       } else {
-        // Position cursor on prompt line
+        stdout.write("\x1b[s\x1b[1B\x1b[J\x1b[u");
+        previousDropdownHeight = 0;
         stdout.write(`\r\x1b[${promptLen + cursor}C`);
       }
     };

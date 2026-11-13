@@ -342,6 +342,31 @@ export const TOP_LEVEL_COMMANDS: SuggestionItem[] = SLASH_COMMANDS.map((c) => ({
   description: c.description,
 }));
 
+const ZERO_ARG_COMMANDS = new Set([
+  "/help",
+  "/clear",
+  "/exit",
+  "/undo",
+  "/retry",
+  "/paste",
+]);
+
+const ALL_COMMAND_NAMES = new Set([
+  "/help",
+  "/setting",
+  "/settings",
+  "/persona",
+  "/model",
+  "/provider",
+  "/api",
+  "/undo",
+  "/session",
+  "/paste",
+  "/retry",
+  "/clear",
+  "/exit",
+]);
+
 export function getContextualSuggestions(
   input: string,
   customSessions?: string[]
@@ -350,13 +375,13 @@ export function getContextualSuggestions(
     return { title: "Available Commands", items: [] };
   }
 
-  const raw = input.trimStart();
+  const trimmed = input.trim();
   const endsWithSpace = input.endsWith(" ");
-  const tokens = raw.split(/\s+/);
-  const baseCmd = tokens[0]?.toLowerCase();
+  const parts = trimmed ? trimmed.split(/\s+/) : [];
+  const baseCmd = parts[0]?.toLowerCase() || "";
 
-  // Level 1: Typing top-level command
-  if (tokens.length === 1 && !endsWithSpace) {
+  // Level 1: Typing top-level command without space yet (e.g. "/", "/p", "/setting")
+  if (parts.length === 1 && !endsWithSpace) {
     const query = baseCmd;
     const items =
       query === "/"
@@ -367,13 +392,22 @@ export function getContextualSuggestions(
     return { title: "Available Commands", items };
   }
 
-  // Level 2: /persona
+  // Non-matching command (e.g. /coba, /xyz)
+  if (!ALL_COMMAND_NAMES.has(baseCmd)) {
+    return { title: "Available Commands", items: [] };
+  }
+
+  // Zero-argument commands: dismiss immediately if trailing space or arguments exist
+  if (ZERO_ARG_COMMANDS.has(baseCmd)) {
+    return { title: "Available Commands", items: [] };
+  }
+
+  // Level 2: /persona <name> (1 argument)
   if (baseCmd === "/persona") {
-    const query = endsWithSpace
-      ? tokens.length > 2
-        ? tokens[tokens.length - 1].toLowerCase()
-        : ""
-      : tokens[1]?.toLowerCase() || "";
+    if (parts.length > 2 || (parts.length === 2 && endsWithSpace)) {
+      return { title: "Select Persona", items: [] };
+    }
+    const query = parts.length === 2 && !endsWithSpace ? parts[1].toLowerCase() : "";
     const items = query
       ? PERSONA_SUBCOMMANDS.filter((p) => p.value.toLowerCase().startsWith(query))
       : [...PERSONA_SUBCOMMANDS];
@@ -382,22 +416,29 @@ export function getContextualSuggestions(
 
   // Level 2 & 3: /setting [memory|steps|voice|show]
   if (baseCmd === "/setting" || baseCmd === "/settings") {
-    const subToken = tokens[1]?.toLowerCase();
+    if (parts.length === 1 && endsWithSpace) {
+      return { title: "Settings Menu", items: [...SETTING_SUBCOMMANDS] };
+    }
+
+    if (parts.length === 2 && !endsWithSpace) {
+      const query = parts[1].toLowerCase();
+      const items = SETTING_SUBCOMMANDS.filter((s) =>
+        s.value.toLowerCase().startsWith(query)
+      );
+      return { title: "Settings Menu", items };
+    }
+
+    const subToken = parts[1]?.toLowerCase();
+
+    if (subToken === "show") {
+      return { title: "Settings Menu", items: [] };
+    }
 
     if (subToken === "memory") {
-      if (tokens.length === 2 && !endsWithSpace) {
-        return {
-          title: "Settings Menu",
-          items: SETTING_SUBCOMMANDS.filter((s) =>
-            s.value.toLowerCase().startsWith("memory")
-          ),
-        };
+      if (parts.length > 3 || (parts.length === 3 && endsWithSpace)) {
+        return { title: "Select Memory Mode", items: [] };
       }
-      const query = endsWithSpace
-        ? tokens.length > 3
-          ? tokens[tokens.length - 1].toLowerCase()
-          : ""
-        : tokens[2]?.toLowerCase() || "";
+      const query = parts.length === 3 && !endsWithSpace ? parts[2].toLowerCase() : "";
       const items = query
         ? SETTING_MEMORY_SUBCOMMANDS.filter((m) =>
             m.value.toLowerCase().startsWith(query)
@@ -407,19 +448,10 @@ export function getContextualSuggestions(
     }
 
     if (subToken === "steps") {
-      if (tokens.length === 2 && !endsWithSpace) {
-        return {
-          title: "Settings Menu",
-          items: SETTING_SUBCOMMANDS.filter((s) =>
-            s.value.toLowerCase().startsWith("steps")
-          ),
-        };
+      if (parts.length > 3 || (parts.length === 3 && endsWithSpace)) {
+        return { title: "Select Max Autonomous Steps", items: [] };
       }
-      const query = endsWithSpace
-        ? tokens.length > 3
-          ? tokens[tokens.length - 1].toLowerCase()
-          : ""
-        : tokens[2]?.toLowerCase() || "";
+      const query = parts.length === 3 && !endsWithSpace ? parts[2].toLowerCase() : "";
       const items = query
         ? SETTING_STEPS_SUBCOMMANDS.filter((s) =>
             s.value.toLowerCase().startsWith(query)
@@ -429,19 +461,10 @@ export function getContextualSuggestions(
     }
 
     if (subToken === "voice") {
-      if (tokens.length === 2 && !endsWithSpace) {
-        return {
-          title: "Settings Menu",
-          items: SETTING_SUBCOMMANDS.filter((s) =>
-            s.value.toLowerCase().startsWith("voice")
-          ),
-        };
+      if (parts.length > 3 || (parts.length === 3 && endsWithSpace)) {
+        return { title: "Toggle Voice Synthesis", items: [] };
       }
-      const query = endsWithSpace
-        ? tokens.length > 3
-          ? tokens[tokens.length - 1].toLowerCase()
-          : ""
-        : tokens[2]?.toLowerCase() || "";
+      const query = parts.length === 3 && !endsWithSpace ? parts[2].toLowerCase() : "";
       const items = query
         ? SETTING_VOICE_SUBCOMMANDS.filter((v) =>
             v.value.toLowerCase().startsWith(query)
@@ -450,51 +473,29 @@ export function getContextualSuggestions(
       return { title: "Toggle Voice Synthesis", items };
     }
 
-    if (subToken === "show") {
-      if (tokens.length === 2 && !endsWithSpace) {
-        return {
-          title: "Settings Menu",
-          items: SETTING_SUBCOMMANDS.filter((s) =>
-            s.value.toLowerCase().startsWith("show")
-          ),
-        };
-      }
-      return { title: "Settings Menu", items: [] };
-    }
-
-    // Level 2: /setting ...
-    const query = endsWithSpace
-      ? tokens.length > 2
-        ? tokens[tokens.length - 1].toLowerCase()
-        : ""
-      : tokens[1]?.toLowerCase() || "";
-    const items = query
-      ? SETTING_SUBCOMMANDS.filter((s) =>
-          s.value.toLowerCase().startsWith(query)
-        )
-      : [...SETTING_SUBCOMMANDS];
-    return { title: "Settings Menu", items };
+    return { title: "Settings Menu", items: [] };
   }
 
   // Level 2 & 3: /provider [fallback]
   if (baseCmd === "/provider") {
-    const subToken = tokens[1]?.toLowerCase();
+    if (parts.length === 1 && endsWithSpace) {
+      return { title: "Select Provider", items: [...PROVIDER_SUBCOMMANDS] };
+    }
+
+    if (parts.length === 2 && !endsWithSpace) {
+      const query = parts[1].toLowerCase();
+      const items = PROVIDER_SUBCOMMANDS.filter((p) =>
+        p.value.toLowerCase().startsWith(query)
+      );
+      return { title: "Select Provider", items };
+    }
+
+    const subToken = parts[1]?.toLowerCase();
     if (subToken === "fallback") {
-      // Level 3: /provider fallback ...
-      if (tokens.length === 2 && !endsWithSpace) {
-        // Still typing "fallback"
-        return {
-          title: "Select Provider",
-          items: PROVIDER_SUBCOMMANDS.filter((p) =>
-            p.value.toLowerCase().startsWith("fallback")
-          ),
-        };
+      if (parts.length > 3 || (parts.length === 3 && endsWithSpace)) {
+        return { title: "Select Fallback Provider", items: [] };
       }
-      const query = endsWithSpace
-        ? tokens.length > 3
-          ? tokens[tokens.length - 1].toLowerCase()
-          : ""
-        : tokens[2]?.toLowerCase() || "";
+      const query = parts.length === 3 && !endsWithSpace ? parts[2].toLowerCase() : "";
       const items = query
         ? FALLBACK_PROVIDER_SUBCOMMANDS.filter((p) =>
             p.value.toLowerCase().startsWith(query)
@@ -503,32 +504,28 @@ export function getContextualSuggestions(
       return { title: "Select Fallback Provider", items };
     }
 
-    // Level 2: /provider ...
-    const query = endsWithSpace
-      ? tokens.length > 2
-        ? tokens[tokens.length - 1].toLowerCase()
-        : ""
-      : tokens[1]?.toLowerCase() || "";
-    const items = query
-      ? PROVIDER_SUBCOMMANDS.filter((p) =>
-          p.value.toLowerCase().startsWith(query)
-        )
-      : [...PROVIDERER_SUBCOMMANDS(query)];
-    return { title: "Select Provider", items };
+    // Single-argument provider (e.g. /provider google )
+    return { title: "Select Provider", items: [] };
   }
 
   // Level 2 & 3: /session [load|save|list]
   if (baseCmd === "/session") {
-    const subToken = tokens[1]?.toLowerCase();
+    if (parts.length === 1 && endsWithSpace) {
+      return { title: "Session Commands", items: [...SESSION_SUBCOMMANDS] };
+    }
+
+    if (parts.length === 2 && !endsWithSpace) {
+      const query = parts[1].toLowerCase();
+      const items = SESSION_SUBCOMMANDS.filter((s) =>
+        s.value.toLowerCase().startsWith(query)
+      );
+      return { title: "Session Commands", items };
+    }
+
+    const subToken = parts[1]?.toLowerCase();
     if (subToken === "load") {
-      // Level 3: /session load ...
-      if (tokens.length === 2 && !endsWithSpace) {
-        return {
-          title: "Session Commands",
-          items: SESSION_SUBCOMMANDS.filter((s) =>
-            s.value.toLowerCase().startsWith("load")
-          ),
-        };
+      if (parts.length > 3 || (parts.length === 3 && endsWithSpace)) {
+        return { title: "Select Saved Session", items: [] };
       }
 
       const availableSessions = customSessions || listSessionsSync();
@@ -539,50 +536,36 @@ export function getContextualSuggestions(
         description: `Saved session: ${name}`,
       }));
 
-      const query = endsWithSpace
-        ? tokens.length > 3
-          ? tokens[tokens.length - 1].toLowerCase()
-          : ""
-        : tokens[2]?.toLowerCase() || "";
-
+      const query = parts.length === 3 && !endsWithSpace ? parts[2].toLowerCase() : "";
       const items = query
         ? sessionItems.filter((s) => s.value.toLowerCase().startsWith(query))
         : sessionItems;
       return { title: "Select Saved Session", items };
     }
 
-    // Level 2: /session ...
-    const query = endsWithSpace
-      ? tokens.length > 2
-        ? tokens[tokens.length - 1].toLowerCase()
-        : ""
-      : tokens[1]?.toLowerCase() || "";
-    const items = query
-      ? SESSION_SUBCOMMANDS.filter((s) => s.value.toLowerCase().startsWith(query))
-      : [...SESSION_SUBCOMMANDS];
-    return { title: "Session Commands", items };
+    // /session save [name] or /session list
+    return { title: "Session Commands", items: [] };
   }
 
-  // Level 2: /api
+  // Level 2: /api <provider> <key>
   if (baseCmd === "/api") {
-    const query = endsWithSpace
-      ? tokens.length > 2
-        ? tokens[tokens.length - 1].toLowerCase()
-        : ""
-      : tokens[1]?.toLowerCase() || "";
+    if (parts.length > 2 || (parts.length === 2 && endsWithSpace)) {
+      // Secret API key being typed
+      return { title: "Select Provider for API Key", items: [] };
+    }
+    const query = parts.length === 2 && !endsWithSpace ? parts[1].toLowerCase() : "";
     const items = query
       ? API_SUBCOMMANDS.filter((a) => a.value.toLowerCase().startsWith(query))
       : [...API_SUBCOMMANDS];
     return { title: "Select Provider for API Key", items };
   }
 
-  // Level 2: /model
+  // Level 2: /model <name> (1 argument)
   if (baseCmd === "/model") {
-    const query = endsWithSpace
-      ? tokens.length > 2
-        ? tokens[tokens.length - 1].toLowerCase()
-        : ""
-      : tokens[1]?.toLowerCase() || "";
+    if (parts.length > 2 || (parts.length === 2 && endsWithSpace)) {
+      return { title: "Model Suggestions", items: [] };
+    }
+    const query = parts.length === 2 && !endsWithSpace ? parts[1].toLowerCase() : "";
     const items = query
       ? MODEL_SUGGESTIONS.filter((m) => m.value.toLowerCase().startsWith(query))
       : [...MODEL_SUGGESTIONS];
@@ -590,12 +573,6 @@ export function getContextualSuggestions(
   }
 
   return { title: "Available Commands", items: [] };
-}
-
-function PROVIDERER_SUBCOMMANDS(query: string): SuggestionItem[] {
-  return query
-    ? PROVIDER_SUBCOMMANDS.filter((p) => p.value.toLowerCase().startsWith(query))
-    : [...PROVIDER_SUBCOMMANDS];
 }
 
 export function filterSlashCommands(
