@@ -1,11 +1,10 @@
 import readline from "readline";
 import chalk from "chalk";
 import {
-  filterSlashCommands,
+  getContextualSuggestions,
   getNextIndex,
   completeSlashCommand,
-  SlashCommand,
-  SLASH_COMMANDS,
+  SuggestionItem,
 } from "./slashCommands.js";
 
 export interface PromptOptions {
@@ -13,8 +12,9 @@ export interface PromptOptions {
 }
 
 export function renderDropdownLines(
-  commands: SlashCommand[],
+  commands: SuggestionItem[],
   selectedIndex: number,
+  title: string = "Slash Commands",
   maxDisplay: number = 6
 ): string[] {
   if (commands.length === 0) return [];
@@ -30,30 +30,31 @@ export function renderDropdownLines(
   const slice = commands.slice(startIdx, startIdx + displayCount);
 
   const lines: string[] = [];
-  lines.push(
-    chalk.cyan(`  ╭─── Slash Commands (${commands.length}) ─────────────────────────╮`)
-  );
+  const totalBoxWidth = 62;
+  const headerPrefix = `  ╭─── ${title} (${commands.length}) `;
+  const headerDashes = Math.max(2, totalBoxWidth - headerPrefix.length - 1);
+  lines.push(chalk.cyan(headerPrefix + "─".repeat(headerDashes) + "╮"));
 
   slice.forEach((cmd, i) => {
     const actualIdx = startIdx + i;
     const isSelected = actualIdx === selectedIndex;
     const pointer = isSelected ? chalk.magenta.bold("❯ ") : "  ";
-    const cmdText = isSelected
-      ? chalk.magenta.bold(cmd.command.padEnd(12))
-      : chalk.white(cmd.command.padEnd(12));
+    const valText = isSelected
+      ? chalk.magenta.bold(cmd.value.padEnd(16))
+      : chalk.white(cmd.value.padEnd(16));
     const descText = isSelected
       ? chalk.white(cmd.description.slice(0, 36))
       : chalk.gray(cmd.description.slice(0, 36));
 
-    const content = `  │ ${pointer}${cmdText} ${descText}`;
-    const plainLength = 4 + 2 + 12 + 1 + Math.min(cmd.description.length, 36);
-    const padding = Math.max(0, 56 - plainLength);
+    const content = `  │ ${pointer}${valText} ${descText}`;
+    const plainLength = 4 + 2 + 16 + 1 + Math.min(cmd.description.length, 36);
+    const padding = Math.max(0, totalBoxWidth - 2 - plainLength);
     lines.push(content + " ".repeat(padding) + chalk.cyan("│"));
   });
 
-  lines.push(
-    chalk.cyan(`  ╰── [↑/↓ Navigate • Tab/Enter Select • Esc Close] ───╯`)
-  );
+  const footerText = "  ╰── [↑/↓ Navigate • Tab/Enter Select • Esc Close] ";
+  const footerDashes = Math.max(2, totalBoxWidth - footerText.length - 1);
+  lines.push(chalk.cyan(footerText + "─".repeat(footerDashes) + "╯"));
   return lines;
 }
 
@@ -82,7 +83,8 @@ export async function interactivePrompt(
     let cursor = 0;
     let selectedIndex = 0;
     let dropdownActive = false;
-    let filtered: SlashCommand[] = [];
+    let dropdownTitle = "Available Commands";
+    let filtered: SuggestionItem[] = [];
     let previousDropdownHeight = 0;
 
     const rawPrompt = promptPrefix.replace(/\x1b\[[0-9;]*m/g, "");
@@ -110,7 +112,11 @@ export async function interactivePrompt(
       stdout.write(promptPrefix + buffer);
 
       if (dropdownActive && filtered.length > 0) {
-        const dropdownLines = renderDropdownLines(filtered, selectedIndex);
+        const dropdownLines = renderDropdownLines(
+          filtered,
+          selectedIndex,
+          dropdownTitle
+        );
         previousDropdownHeight = dropdownLines.length;
 
         stdout.write("\n" + dropdownLines.join("\n"));
@@ -125,7 +131,9 @@ export async function interactivePrompt(
 
     const updateDropdown = () => {
       if (buffer.startsWith("/")) {
-        filtered = filterSlashCommands(buffer);
+        const res = getContextualSuggestions(buffer);
+        dropdownTitle = res.title;
+        filtered = res.items;
         dropdownActive = filtered.length > 0;
         if (selectedIndex >= filtered.length) {
           selectedIndex = 0;
@@ -201,7 +209,7 @@ export async function interactivePrompt(
           const chosen = filtered[selectedIndex];
           buffer = completeSlashCommand(buffer, chosen);
           cursor = buffer.length;
-          dropdownActive = false;
+          updateDropdown();
           render();
           return;
         }
@@ -209,16 +217,15 @@ export async function interactivePrompt(
 
       // Enter key
       if (key.name === "return" || key.name === "enter") {
-        // If dropdown is active and user typed a partial command, complete it
         if (
           dropdownActive &&
           filtered.length > 0 &&
-          !SLASH_COMMANDS.some((c) => c.command === buffer.trim())
+          !filtered.some((c) => buffer.trim().endsWith(c.value))
         ) {
           const chosen = filtered[selectedIndex];
           buffer = completeSlashCommand(buffer, chosen);
           cursor = buffer.length;
-          dropdownActive = false;
+          updateDropdown();
           render();
           return;
         }

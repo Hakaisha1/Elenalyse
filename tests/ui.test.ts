@@ -5,9 +5,16 @@ import {
 } from "../src/ui/banner.js";
 import {
   filterSlashCommands,
+  getContextualSuggestions,
   getNextIndex,
   completeSlashCommand,
   SLASH_COMMANDS,
+  PERSONA_SUBCOMMANDS,
+  PROVIDER_SUBCOMMANDS,
+  FALLBACK_PROVIDER_SUBCOMMANDS,
+  SESSION_SUBCOMMANDS,
+  API_SUBCOMMANDS,
+  MODEL_SUGGESTIONS,
 } from "../src/ui/slashCommands.js";
 import { renderDropdownLines } from "../src/ui/prompt.js";
 
@@ -82,82 +89,213 @@ describe("Modern UI / UX Suite", () => {
     });
   });
 
-  describe("Slash Commands Autocomplete (filterSlashCommands)", () => {
-    it("returns all slash commands when typing '/'", () => {
-      const matches = filterSlashCommands("/");
-      expect(matches.length).toBe(SLASH_COMMANDS.length);
-      expect(matches.map((c) => c.command)).toContain("/help");
-      expect(matches.map((c) => c.command)).toContain("/exit");
-    });
+  describe("Contextual Multi-Level Sub-Command Autocomplete", () => {
+    it("returns top-level commands when input is '/' or partial command", () => {
+      const allCmds = getContextualSuggestions("/");
+      expect(allCmds.title).toBe("Available Commands");
+      expect(allCmds.items.length).toBe(SLASH_COMMANDS.length);
 
-    it("filters commands by prefix matching", () => {
-      const pMatches = filterSlashCommands("/p");
-      expect(pMatches.map((c) => c.command)).toEqual([
+      const pCmds = getContextualSuggestions("/p");
+      expect(pCmds.items.map((i) => i.value)).toEqual([
         "/persona",
         "/provider",
         "/paste",
       ]);
-
-      const uMatches = filterSlashCommands("/u");
-      expect(uMatches.map((c) => c.command)).toEqual(["/undo"]);
-
-      const sMatches = filterSlashCommands("/s");
-      expect(sMatches.map((c) => c.command)).toEqual(["/session"]);
     });
 
-    it("returns empty array when no commands match query", () => {
-      expect(filterSlashCommands("/unknowncommand")).toEqual([]);
+    it("resolves Level 2 sub-options for '/persona ' with prefix filtering", () => {
+      const allPersonas = getContextualSuggestions("/persona ");
+      expect(allPersonas.title).toBe("Select Persona");
+      expect(allPersonas.items.map((i) => i.value)).toEqual([
+        "eli",
+        "rei",
+        "sora",
+        "rin",
+      ]);
+
+      const filtered = getContextualSuggestions("/persona r");
+      expect(filtered.title).toBe("Select Persona");
+      expect(filtered.items.map((i) => i.value)).toEqual(["rei", "rin"]);
     });
 
-    it("returns empty array when input does not start with '/'", () => {
-      expect(filterSlashCommands("hello")).toEqual([]);
-      expect(filterSlashCommands("")).toEqual([]);
+    it("resolves Level 2 sub-options for '/provider ' and Level 3 for '/provider fallback '", () => {
+      const providers = getContextualSuggestions("/provider ");
+      expect(providers.title).toBe("Select Provider");
+      expect(providers.items.map((i) => i.value)).toContain("google");
+      expect(providers.items.map((i) => i.value)).toContain("fallback");
+
+      const fallbacks = getContextualSuggestions("/provider fallback ");
+      expect(fallbacks.title).toBe("Select Fallback Provider");
+      expect(fallbacks.items.map((i) => i.value)).toEqual([
+        "google",
+        "openai",
+        "openrouter",
+        "local",
+      ]);
+
+      const filteredFallback = getContextualSuggestions("/provider fallback g");
+      expect(filteredFallback.items.map((i) => i.value)).toEqual(["google"]);
+    });
+
+    it("resolves Level 2 sub-options for '/session ' and dynamic Level 3 for '/session load '", () => {
+      const sessionOps = getContextualSuggestions("/session ");
+      expect(sessionOps.title).toBe("Session Commands");
+      expect(sessionOps.items.map((i) => i.value)).toEqual([
+        "save",
+        "load",
+        "list",
+      ]);
+
+      // Provide mock sessions to test dynamic session resolution
+      const mockSessions = ["client-work", "debug-ai", "demo-app"];
+      const sessionLoads = getContextualSuggestions(
+        "/session load ",
+        mockSessions
+      );
+      expect(sessionLoads.title).toBe("Select Saved Session");
+      expect(sessionLoads.items.map((i) => i.value)).toEqual(mockSessions);
+
+      const filteredLoads = getContextualSuggestions(
+        "/session load d",
+        mockSessions
+      );
+      expect(filteredLoads.items.map((i) => i.value)).toEqual([
+        "debug-ai",
+        "demo-app",
+      ]);
+    });
+
+    it("resolves Level 2 sub-options for '/api ' and '/model '", () => {
+      const apiProviders = getContextualSuggestions("/api ");
+      expect(apiProviders.title).toBe("Select Provider for API Key");
+      expect(apiProviders.items.map((i) => i.value)).toEqual([
+        "google",
+        "openai",
+        "openrouter",
+      ]);
+
+      const models = getContextualSuggestions("/model ");
+      expect(models.title).toBe("Model Suggestions");
+      expect(models.items.map((i) => i.value)).toContain("gemini-2.5-flash");
+      expect(models.items.map((i) => i.value)).toContain("gpt-4o");
+
+      const filteredModel = getContextualSuggestions("/model gpt");
+      expect(filteredModel.items.map((i) => i.value)).toEqual([
+        "gpt-4o",
+        "gpt-4o-mini",
+      ]);
+    });
+
+    it("completes sub-options accurately across all levels", () => {
+      // Level 1 completion
+      expect(
+        completeSlashCommand("/per", {
+          value: "/persona",
+          label: "/persona",
+          command: "/persona",
+          description: "",
+        })
+      ).toBe("/persona ");
+
+      // Level 2 completion with trailing space in input
+      expect(
+        completeSlashCommand("/persona ", {
+          value: "rei",
+          label: "rei",
+          command: "rei",
+          description: "",
+        })
+      ).toBe("/persona rei");
+
+      // Level 2 completion with partial query in input
+      expect(
+        completeSlashCommand("/persona r", {
+          value: "rei",
+          label: "rei",
+          command: "rei",
+          description: "",
+        })
+      ).toBe("/persona rei");
+
+      // Level 3 completion
+      expect(
+        completeSlashCommand("/provider fallback ", {
+          value: "google",
+          label: "google",
+          command: "google",
+          description: "",
+        })
+      ).toBe("/provider fallback google");
+
+      expect(
+        completeSlashCommand("/provider fallback o", {
+          value: "openai",
+          label: "openai",
+          command: "openai",
+          description: "",
+        })
+      ).toBe("/provider fallback openai");
+
+      expect(
+        completeSlashCommand("/session load ", {
+          value: "my-session",
+          label: "my-session",
+          command: "my-session",
+          description: "",
+        })
+      ).toBe("/session load my-session");
     });
   });
 
-  describe("Dropdown Navigation (getNextIndex)", () => {
-    it("navigates down with wrap-around", () => {
+  describe("English-First Metadata Verification", () => {
+    it("ensures all command and sub-command descriptions are English-first", () => {
+      const allSets = [
+        SLASH_COMMANDS,
+        PERSONA_SUBCOMMANDS,
+        PROVIDER_SUBCOMMANDS,
+        FALLBACK_PROVIDER_SUBCOMMANDS,
+        SESSION_SUBCOMMANDS,
+        API_SUBCOMMANDS,
+        MODEL_SUGGESTIONS,
+      ];
+
+      // Non-English / Indonesian words that should not appear in metadata
+      const forbiddenWords = ["ubah", "simpan", "tampilkan", "keluar", "pilih", "pengaturan"];
+
+      for (const list of allSets) {
+        for (const item of list) {
+          expect(item.description.length).toBeGreaterThan(0);
+          for (const word of forbiddenWords) {
+            expect(item.description.toLowerCase()).not.toContain(word);
+          }
+        }
+      }
+    });
+  });
+
+  describe("Dropdown Navigation & Frame Rendering", () => {
+    it("navigates down and up with wrap-around", () => {
       expect(getNextIndex(0, 3, "down")).toBe(1);
-      expect(getNextIndex(1, 3, "down")).toBe(2);
-      expect(getNextIndex(2, 3, "down")).toBe(0); // Wrap around
-    });
-
-    it("navigates up with wrap-around", () => {
-      expect(getNextIndex(2, 3, "up")).toBe(1);
-      expect(getNextIndex(1, 3, "up")).toBe(0);
-      expect(getNextIndex(0, 3, "up")).toBe(2); // Wrap around
-    });
-
-    it("handles total <= 0 safely", () => {
+      expect(getNextIndex(2, 3, "down")).toBe(0);
+      expect(getNextIndex(0, 3, "up")).toBe(2);
       expect(getNextIndex(0, 0, "down")).toBe(0);
-      expect(getNextIndex(0, 0, "up")).toBe(0);
-    });
-  });
-
-  describe("Command Completion (completeSlashCommand)", () => {
-    it("appends trailing space to completed command if no args were present", () => {
-      const selected = SLASH_COMMANDS.find((c) => c.command === "/persona")!;
-      expect(completeSlashCommand("/per", selected)).toBe("/persona ");
     });
 
-    it("preserves trailing arguments when autocompleting", () => {
-      const selected = SLASH_COMMANDS.find((c) => c.command === "/persona")!;
-      expect(completeSlashCommand("/p rin", selected)).toBe("/persona rin");
-    });
-  });
-
-  describe("Dropdown Box Rendering (renderDropdownLines)", () => {
-    it("renders formatted dropdown frame with command items", () => {
-      const commands = filterSlashCommands("/p");
-      const lines = renderDropdownLines(commands, 0);
+    it("renders formatted dropdown box with custom contextual title and item pointer", () => {
+      const suggestions = getContextualSuggestions("/persona ");
+      const lines = renderDropdownLines(
+        suggestions.items,
+        1,
+        suggestions.title
+      );
 
       expect(lines.length).toBeGreaterThan(0);
-      expect(lines[0]).toContain("Slash Commands");
-      expect(lines.some((l) => l.includes("❯"))).toBe(true);
+      expect(lines[0]).toContain("Select Persona");
+      expect(lines.some((l) => l.includes("❯") && l.includes("rei"))).toBe(true);
       expect(lines[lines.length - 1]).toContain("Tab/Enter Select");
     });
 
-    it("returns empty array when commands list is empty", () => {
+    it("returns empty array when suggestions list is empty", () => {
       expect(renderDropdownLines([], 0)).toEqual([]);
     });
   });

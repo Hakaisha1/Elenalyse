@@ -1,4 +1,5 @@
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 import os from "os";
 
@@ -87,6 +88,18 @@ export async function listSessions(): Promise<string[]> {
   const sessionsDir = getSessionsDir();
   try {
     const files = await fs.readdir(sessionsDir);
+    return files
+      .filter((file) => file.endsWith(".json"))
+      .map((file) => file.slice(0, -5));
+  } catch {
+    return [];
+  }
+}
+
+export function listSessionsSync(): string[] {
+  const sessionsDir = getSessionsDir();
+  try {
+    const files = fsSync.readdirSync(sessionsDir);
     return files
       .filter((file) => file.endsWith(".json"))
       .map((file) => file.slice(0, -5));
