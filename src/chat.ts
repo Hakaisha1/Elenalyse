@@ -1,4 +1,4 @@
-import { generateText, streamText } from "ai";
+import { generateText } from "ai";
 import * as readline from "readline/promises";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
@@ -19,6 +19,43 @@ import { saveSession, loadSession, listSessions } from "./session.js";
 import { renderWelcomeBanner, printWelcomeBanner } from "./ui/banner.js";
 import { interactivePrompt } from "./ui/prompt.js";
 export { renderWelcomeBanner, printWelcomeBanner, interactivePrompt };
+import { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall } from "./toolParser.js";
+export { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall };
+
+export const MAX_AUTONOMOUS_STEPS = 15;
+
+export function formatToolArgs(args: Record<string, any>): string {
+  if (!args || Object.keys(args).length === 0) return "";
+  return Object.entries(args)
+    .map(([k, v]) => {
+      let strVal = typeof v === "string" ? v : JSON.stringify(v);
+      if (strVal && strVal.length > 25) {
+        strVal = strVal.slice(0, 22) + "...";
+      }
+      return `${k}=${strVal}`;
+    })
+    .join(", ");
+}
+
+export async function executeToolDirectly(
+  toolName: string,
+  rawArgs: Record<string, any>,
+  toolsMap: Record<string, any>
+): Promise<string> {
+  const canonical = canonicalToolName(toolName);
+  const normalizedArgs = normalizeToolArgs(canonical, rawArgs || {});
+  const toolInstance = toolsMap[canonical];
+  if (!toolInstance || typeof toolInstance.execute !== "function") {
+    return `Error: Unknown or unsupported tool '${toolName}'.`;
+  }
+  try {
+    const result = await toolInstance.execute(normalizedArgs);
+    if (typeof result === "string") return result;
+    return JSON.stringify(result, null, 2);
+  } catch (err: any) {
+    return `Error executing ${canonical}: ${err?.message || String(err)}`;
+  }
+}
 import {
   startBridgeServer,
   stopBridgeServer,
@@ -52,12 +89,18 @@ function stripVoiceTags(text: string): string {
 function sanitizeForMemory(messages: any[]): any[] {
   return messages.map((m: any) => {
     if (m.role === "assistant") {
-      let content: string;
+      let content: string = "";
       if (Array.isArray(m.content)) {
         content = m.content
           .filter((p: any) => p.type === "text")
           .map((p: any) => p.text)
           .join("");
+        if (!content) {
+          const toolCalls = m.content.filter((p: any) => p.type === "tool-call");
+          if (toolCalls.length > 0) {
+            content = `[Executed tool: ${toolCalls.map((t: any) => t.toolName).join(", ")}]`;
+          }
+        }
       } else {
         content = String(m.content || "");
       }
@@ -126,66 +169,138 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
       try {
         const aiClientFactory = await getAiClient(runProvider, runModel, config);
 
-        const { text, toolCalls, toolResults, usage } = await generateText({
-          model: aiClientFactory,
-          system: systemPrompt,
-          prompt: message,
-          tools: {
-            readFile: readFileTool,
-            listDir: listDirTool,
-            gitStatus: gitStatusTool,
-            gitDiff: gitDiffTool,
-            searchCode: searchCodeTool,
-            findFiles: findFilesTool,
-            writeFile: createWriteFileTool(
-              () => spinner.stop(),
-              () => spinner.start(),
-              rl
-            ),
-            editFile: createEditFileTool(
-              () => spinner.stop(),
-              () => spinner.start(),
-              rl
-            ),
-            runCommand: createRunCommandTool(
-              () => spinner.stop(),
-              () => spinner.start(),
-              rl
-            )
-          },
-          // @ts-ignore
-          maxSteps: 5,
-        });
+        const toolsMap = {
+          readFile: readFileTool,
+          listDir: listDirTool,
+          gitStatus: gitStatusTool,
+          gitDiff: gitDiffTool,
+          searchCode: searchCodeTool,
+          findFiles: findFilesTool,
+          writeFile: createWriteFileTool(
+            () => spinner.stop(),
+            () => spinner.start(),
+            rl
+          ),
+          editFile: createEditFileTool(
+            () => spinner.stop(),
+            () => spinner.start(),
+            rl
+          ),
+          runCommand: createRunCommandTool(
+            () => spinner.stop(),
+            () => spinner.start(),
+            rl
+          )
+        };
 
-        spinner.stop();
-        
-        // Robust manual loop for AI SDK version / Provider compatibility issues
-        if (!text && toolCalls && toolCalls.length > 0 && toolResults && toolResults.length > 0) {
-          const toolSpinner = ora(`Evaluating ${toolCalls[0].toolName} results...`).start();
-          
-          const evaluationPrompt = `${message}\n\n[System: You called the tool "${toolCalls[0].toolName}" and received this result:\n${JSON.stringify((toolResults[0] as any).result || (toolResults[0] as any).output || "Success", null, 2)}\n\nPlease provide your final answer to the user based on this data. Do not output JSON, speak naturally.]`;
+        const currentMessages: any[] = [{ role: "user", content: message }];
+        let previousToolCallsStr = "";
+        let finalText = "";
+        let totalPromptTokens = 0;
+        let totalCompletionTokens = 0;
 
-          const secondRun = await generateText({
+        for (let step = 1; step <= MAX_AUTONOMOUS_STEPS; step++) {
+          const genResult = await generateText({
             model: aiClientFactory,
             system: systemPrompt,
-            prompt: evaluationPrompt,
+            messages: currentMessages,
+            tools: toolsMap,
+            // @ts-ignore
+            maxSteps: 1,
           });
 
-          toolSpinner.stop();
-          if (secondRun.usage) {
-            (usage as any).promptTokens += (secondRun.usage as any).promptTokens || 0;
-            (usage as any).completionTokens += (secondRun.usage as any).completionTokens || 0;
+          if (genResult.usage) {
+            totalPromptTokens += (genResult.usage as any).promptTokens || 0;
+            totalCompletionTokens += (genResult.usage as any).completionTokens || 0;
           }
-          console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + secondRun.text);
-        } else {
-          console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + text);
+
+          // 1. Check native tool calls
+          if (genResult.toolCalls && genResult.toolCalls.length > 0) {
+            const tc = genResult.toolCalls[0];
+            const argsSummary = formatToolArgs((tc as any).args || {});
+            spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${MAX_AUTONOMOUS_STEPS}]...`;
+
+            if (genResult.response && genResult.response.messages) {
+              currentMessages.push(...genResult.response.messages);
+            } else {
+              currentMessages.push({
+                role: "assistant",
+                content: genResult.text || `[Calling tool ${tc.toolName}]`,
+              });
+            }
+            continue;
+          }
+
+          // 2. Check text-based XML or JSON tool calls
+          const { toolCalls: textToolCalls } = extractTextToolCalls(genResult.text || "");
+          if (textToolCalls.length > 0) {
+            let loopDetected = false;
+            let combinedToolOutputs = "";
+
+            for (const tc of textToolCalls) {
+              const toolCallSig = `${tc.toolName}:${JSON.stringify(tc.args)}`;
+              if (toolCallSig === previousToolCallsStr) {
+                spinner.warn(chalk.yellow(`Agent loop detected: repeated identical tool call ${tc.toolName}.`));
+                loopDetected = true;
+                break;
+              }
+              previousToolCallsStr = toolCallSig;
+
+              const argsSummary = formatToolArgs(tc.args);
+              spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${MAX_AUTONOMOUS_STEPS}]...`;
+
+              const toolOutput = await executeToolDirectly(tc.toolName, tc.args, toolsMap);
+              combinedToolOutputs += `[System Tool Result for "${tc.toolName}"]:\n${toolOutput}\n\n`;
+            }
+
+            if (loopDetected) {
+              finalText = stripToolCallTags(genResult.text || "");
+              break;
+            }
+
+            currentMessages.push({
+              role: "assistant",
+              content: genResult.text,
+            });
+            currentMessages.push({
+              role: "user",
+              content: `${combinedToolOutputs.trim()}\n\nPlease proceed with your analysis or provide your final report.`,
+            });
+            continue;
+          }
+
+          // 3. No tool calls - this is the final report
+          finalText = stripToolCallTags(genResult.text || "");
+          break;
         }
 
-        console.log(chalk.gray(`\n[Token Usage: ${(usage as any).promptTokens || 0} input / ${(usage as any).completionTokens || 0} output]`));
+        spinner.stop();
+
+        if (!finalText && currentMessages.length > 1) {
+          const finalSummaryRun = await generateText({
+            model: aiClientFactory,
+            system: systemPrompt,
+            messages: [
+              ...currentMessages,
+              {
+                role: "user",
+                content: "[System: Max analysis steps reached. Please provide your final comprehensive summary based on all findings so far.]",
+              },
+            ],
+          });
+          finalText = stripToolCallTags(finalSummaryRun.text || "");
+          if (finalSummaryRun.usage) {
+            totalPromptTokens += (finalSummaryRun.usage as any).promptTokens || 0;
+            totalCompletionTokens += (finalSummaryRun.usage as any).completionTokens || 0;
+          }
+        }
+
+        console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + finalText);
+        console.log(chalk.gray(`\n[Token Usage: ${totalPromptTokens} input / ${totalCompletionTokens} output]`));
 
         if (voiceEnabled) {
           await startBridgeServer();
-          let { displayText, voiceLines } = extractVoiceSegments(text, debug);
+          let { displayText, voiceLines } = extractVoiceSegments(finalText, debug);
           if (voiceLines.length > 0) {
             const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
             await playVoiceLines(voiceLines, speakerId);
@@ -659,129 +774,168 @@ export async function startInteractiveChat(
           // Trim memory before sending to API
           memory[activePersona] = trimMemory(memory[activePersona], memoryMode, debug);
 
+          const toolsMap = {
+            readFile: readFileTool,
+            listDir: listDirTool,
+            gitStatus: gitStatusTool,
+            gitDiff: gitDiffTool,
+            searchCode: searchCodeTool,
+            findFiles: findFilesTool,
+            writeFile: createWriteFileTool(
+              () => spinner.stop(),
+              () => spinner.start(),
+              rl
+            ),
+            editFile: createEditFileTool(
+              () => spinner.stop(),
+              () => spinner.start(),
+              rl
+            ),
+            runCommand: createRunCommandTool(
+              () => spinner.stop(),
+              () => spinner.start(),
+              rl
+            )
+          };
+
+          const currentMessages: any[] = [...memory[activePersona]];
           let previousToolCallsStr = "";
+          let finalText = "";
+          let totalPromptTokens = 0;
+          let totalCompletionTokens = 0;
 
-          const result = streamText({
-            model: aiModel,
-            abortSignal: abortController.signal,
-            system: await getPersonaPrompt(activePersona, voiceEnabled),
-            messages: memory[activePersona],
-            tools: {
-              readFile: readFileTool,
-              listDir: listDirTool,
-              gitStatus: gitStatusTool,
-              gitDiff: gitDiffTool,
-              searchCode: searchCodeTool,
-              findFiles: findFilesTool,
-              writeFile: createWriteFileTool(
-                () => spinner.stop(),
-                () => spinner.start(),
-                rl
-              ),
-              editFile: createEditFileTool(
-                () => spinner.stop(),
-                () => spinner.start(),
-                rl
-              ),
-              runCommand: createRunCommandTool(
-                () => spinner.stop(),
-                () => spinner.start(),
-                rl
-              )
-            },
-            // @ts-ignore
-            maxSteps: 5,
-            onStepFinish: (event) => {
-              if (debug) {
-                console.log(chalk.gray(`\n[DEBUG] Step completed. Reason: ${event.finishReason}`));
-                if (event.text) console.log(chalk.gray(`[DEBUG] Text generated so far: ${event.text.length} chars`));
-                if (event.toolCalls && event.toolCalls.length > 0) {
-                  event.toolCalls.forEach(tc => {
-                     console.log(chalk.magenta(`[DEBUG] AI called tool: ${tc.toolName}`));
-                     console.log(chalk.gray(`[DEBUG] Args: ${JSON.stringify((tc as any).args)}`));
-                  });
-                }
-              }
-              if (event.toolCalls && event.toolCalls.length > 0) {
-                const currentToolCallsStr = JSON.stringify(event.toolCalls.map(tc => ({ name: tc.toolName, args: (tc as any).args })));
-                if (currentToolCallsStr === previousToolCallsStr) {
-                  console.log(chalk.red(`\n[ERROR] Agent Loop Detected! Repeated identical tool call: ${event.toolCalls[0].toolName}. Aborting.`));
-                  throw new Error(`Agent loop detected: ${event.toolCalls[0].toolName} called with identical arguments twice in a row.`);
-                }
-                previousToolCallsStr = currentToolCallsStr;
+          for (let step = 1; step <= MAX_AUTONOMOUS_STEPS; step++) {
+            if (isAborted) break;
 
-                // Track files touched for handoff context
-                for (const tc of event.toolCalls) {
-                  const args = (tc as any).args;
-                  const filePath = args?.filePath || args?.path || args?.file || args?.filename || args?.dirPath;
-                  if (filePath && typeof filePath === "string") {
-                    sessionState.filesTouched.add(filePath);
-                  }
-                }
-              }
+            const genResult = await generateText({
+              model: aiModel,
+              abortSignal: abortController.signal,
+              system: await getPersonaPrompt(activePersona, voiceEnabled),
+              messages: currentMessages,
+              tools: toolsMap,
+              // @ts-ignore
+              maxSteps: 1,
+            });
+
+            if (genResult.usage) {
+              totalPromptTokens += (genResult.usage as any).promptTokens || 0;
+              totalCompletionTokens += (genResult.usage as any).completionTokens || 0;
             }
-          });
 
-          // Stream text to terminal in real-time
-          let headerPrinted = false;
-          let fullText = "";
-
-          for await (const chunk of result.textStream) {
-            if (!headerPrinted) {
-              spinner.stop();
-              process.stdout.write(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `));
-              headerPrinted = true;
-            }
-            process.stdout.write(chunk);
-            fullText += chunk;
-          }
-
-          // Wait for the full result to finalize (tool calls, usage, etc.)
-          const finalResult = await result.response;
-          const usage = await result.usage;
-          const steps = await result.steps;
-
-          // If no text was streamed (tool-only response), do a follow-up generateText
-          if (!fullText && steps && steps.length > 0) {
-            const lastStep = steps[steps.length - 1];
-            if (lastStep.toolCalls && lastStep.toolCalls.length > 0) {
-              spinner.stop();
-              const toolSpinner = ora(`Evaluating ${lastStep.toolCalls[0].toolName} results...`).start();
-
-              const evaluationMessages = [...memory[activePersona]];
-              if (finalResult && finalResult.messages) {
-                evaluationMessages.push(...finalResult.messages);
+            // 1. Check native tool calls
+            if (genResult.toolCalls && genResult.toolCalls.length > 0) {
+              for (const tc of genResult.toolCalls) {
+                const args = (tc as any).args;
+                const filePath = args?.filePath || args?.path || args?.file || args?.filename || args?.dirPath;
+                if (filePath && typeof filePath === "string") {
+                  sessionState.filesTouched.add(filePath);
+                }
               }
 
-              const secondRun = await generateText({
-                model: aiModel,
-                system: await getPersonaPrompt(activePersona, voiceEnabled),
-                messages: evaluationMessages,
+              const tc = genResult.toolCalls[0];
+              const argsSummary = formatToolArgs((tc as any).args || {});
+              spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${MAX_AUTONOMOUS_STEPS}]...`;
+
+              if (genResult.response && genResult.response.messages) {
+                currentMessages.push(...genResult.response.messages);
+              } else {
+                currentMessages.push({
+                  role: "assistant",
+                  content: genResult.text || `[Calling tool ${tc.toolName}]`,
+                });
+              }
+              continue;
+            }
+
+            // 2. Check text-based XML or JSON tool calls
+            const { toolCalls: textToolCalls } = extractTextToolCalls(genResult.text || "");
+            if (textToolCalls.length > 0) {
+              let loopDetected = false;
+              let combinedToolOutputs = "";
+
+              for (const tc of textToolCalls) {
+                const toolCallSig = `${tc.toolName}:${JSON.stringify(tc.args)}`;
+                if (toolCallSig === previousToolCallsStr) {
+                  spinner.warn(chalk.yellow(`Agent loop detected: repeated identical tool call ${tc.toolName}.`));
+                  loopDetected = true;
+                  break;
+                }
+                previousToolCallsStr = toolCallSig;
+
+                const argsSummary = formatToolArgs(tc.args);
+                spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${MAX_AUTONOMOUS_STEPS}]...`;
+
+                const filePath = tc.args?.filePath || tc.args?.dirPath;
+                if (filePath && typeof filePath === "string") {
+                  sessionState.filesTouched.add(filePath);
+                }
+
+                const toolOutput = await executeToolDirectly(tc.toolName, tc.args, toolsMap);
+                combinedToolOutputs += `[System Tool Result for "${tc.toolName}"]:\n${toolOutput}\n\n`;
+              }
+
+              if (loopDetected) {
+                finalText = stripToolCallTags(genResult.text || "");
+                break;
+              }
+
+              currentMessages.push({
+                role: "assistant",
+                content: genResult.text,
               });
-              toolSpinner.stop();
-              fullText = secondRun.text;
-
-              process.stdout.write(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + fullText);
+              currentMessages.push({
+                role: "user",
+                content: `${combinedToolOutputs.trim()}\n\nPlease proceed with your analysis or provide your final report.`,
+              });
+              continue;
             }
+
+            // 3. No tool calls - this is the final report
+            finalText = stripToolCallTags(genResult.text || "");
+            currentMessages.push({
+              role: "assistant",
+              content: stripVoiceTags(finalText),
+            });
+            break;
           }
 
-          if (!headerPrinted) spinner.stop();
-          process.stdout.write("\n");
+          spinner.stop();
 
-          if (steps && steps.length >= 5) {
-            console.log(chalk.yellow(`[WARNING] Max steps (5) reached. The AI was forcefully stopped.`));
+          if (!finalText && currentMessages.length > memory[activePersona].length && !isAborted) {
+            spinner.start(`Generating final summary...`);
+            const finalSummaryRun = await generateText({
+              model: aiModel,
+              abortSignal: abortController.signal,
+              system: await getPersonaPrompt(activePersona, voiceEnabled),
+              messages: [
+                ...currentMessages,
+                {
+                  role: "user",
+                  content: "[System: Max analysis steps reached. Please provide your final comprehensive summary based on all findings so far.]",
+                },
+              ],
+            });
+            spinner.stop();
+            finalText = stripToolCallTags(finalSummaryRun.text || "");
+            if (finalSummaryRun.usage) {
+              totalPromptTokens += (finalSummaryRun.usage as any).promptTokens || 0;
+              totalCompletionTokens += (finalSummaryRun.usage as any).completionTokens || 0;
+            }
+            currentMessages.push({
+              role: "assistant",
+              content: stripVoiceTags(finalText),
+            });
+          }
+
+          if (finalText) {
+            console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + finalText);
           }
 
           // Save to memory
-          if (finalResult && finalResult.messages) {
-            memory[activePersona].push(...sanitizeForMemory(finalResult.messages));
-          } else {
-            memory[activePersona].push({ role: "assistant", content: stripVoiceTags(fullText) });
-          }
+          memory[activePersona] = sanitizeForMemory(currentMessages);
 
-          let { displayText, voiceLines } = extractVoiceSegments(fullText, debug);
-          // displayText already printed via stream, only show token usage
-          console.log(chalk.gray(`[Token Usage: ${(usage as any)?.promptTokens || 0} input / ${(usage as any)?.completionTokens || 0} output]`));
+          let { displayText, voiceLines } = extractVoiceSegments(finalText, debug);
+          console.log(chalk.gray(`[Token Usage: ${totalPromptTokens} input / ${totalCompletionTokens} output]`));
 
           if (debug) {
             console.log(chalk.gray(`[DEBUG] Memory (${memory[activePersona].length} messages):`));

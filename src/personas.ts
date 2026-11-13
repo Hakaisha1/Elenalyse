@@ -41,6 +41,7 @@ export function getProjectContext(rootDir: string = process.cwd()): string {
 export async function getPersonaPrompt(persona: Persona, voiceEnabled: boolean = false): Promise<string> {
   let basePrompt = personas[persona] || personas.eli;
   basePrompt += "\n\n[SYSTEM DIRECTIVE: TOOL USAGE]\nIf the user asks you to create, write, or generate a file, you MUST ALWAYS use the `writeFile` tool to do it instead of outputting markdown code blocks in chat. If the user asks you to edit or modify a file, you MUST ALWAYS use the `editFile` tool. Outputting code blocks without using these tools when explicitly asked to write a file is STRICTLY PROHIBITED.";
+  basePrompt += "\n\n[AUTONOMOUS ANALYSIS PROTOCOL]\nWhen asked to analyze, audit, inspect, review, or search the codebase: You MUST execute the necessary tools immediately. DO NOT tell the user to wait or ask what to do next without performing the work. Perform all necessary file inspections autonomously across multiple steps. Only provide your final comprehensive report once the inspection is complete.";
 
   const projectContext = getProjectContext();
   if (projectContext) {
