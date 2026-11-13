@@ -75,6 +75,61 @@ export const listDirTool = tool({
   },
 });
 
+export const gitStatusTool = tool({
+  description: "Get the current git repository status in short format (git status -s). Read-only operation.",
+  parameters: z.object({}).passthrough(),
+  // @ts-ignore
+  execute: async () => {
+    try {
+      const { stdout, stderr } = await execAsync("git status -s", { cwd: process.cwd(), timeout: 10000 });
+      if (stderr && !stdout) {
+        return `Git status error: ${stderr}`;
+      }
+      return stdout.trim() ? stdout : "Working tree clean, nothing to commit.";
+    } catch (err: any) {
+      return `Error executing git status: ${err.message}`;
+    }
+  },
+});
+
+export const gitDiffTool = tool({
+  description: "View git diff of modified files (unstaged by default, or staged if requested). Read-only operation.",
+  parameters: z.object({
+    staged: z.boolean().optional().describe("If true, view staged changes (--staged/--cached)"),
+    filePath: z.string().optional().describe("Optional specific file path to diff"),
+  }).passthrough(),
+  // @ts-ignore
+  execute: async (args: any) => {
+    try {
+      const staged = Boolean(args?.staged);
+      const filePath = args?.filePath || args?.file || args?.path;
+
+      let cmd = "git diff";
+      if (staged) {
+        cmd += " --staged";
+      }
+      if (filePath) {
+        cmd += ` -- "${filePath.replace(/"/g, '\\"')}"`;
+      }
+
+      const { stdout, stderr } = await execAsync(cmd, { cwd: process.cwd(), timeout: 15000 });
+      if (stderr && !stdout) {
+        return `Git diff error: ${stderr}`;
+      }
+      if (!stdout.trim()) {
+        return staged ? "No staged changes found." : "No unstaged changes found.";
+      }
+      const truncate = (s: string) =>
+        s.length > MAX_OUTPUT_CHARS
+          ? s.slice(0, MAX_OUTPUT_CHARS) + `\n...[Output truncated. Total length: ${s.length} chars]`
+          : s;
+      return truncate(stdout);
+    } catch (err: any) {
+      return `Error executing git diff: ${err.message}`;
+    }
+  },
+});
+
 export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner: () => void, rlInterface?: any) => {
   const isWindows = process.platform === "win32";
   const osContext = isWindows 
@@ -192,6 +247,90 @@ export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner:
   }
 });
 
+export function applyFileEdit(
+  content: string,
+  targetText: string,
+  replacementText: string
+): { success: boolean; newContent?: string; error?: string } {
+  // 1. Check for true exact match (verbatim including indentation and normalized line endings)
+  const normalizedContent = content.replace(/\r\n/g, "\n");
+  const normalizedTarget = targetText.replace(/\r\n/g, "\n");
+  const normalizedReplacement = replacementText.replace(/\r\n/g, "\n");
+
+  let exactIndex = normalizedContent.indexOf(normalizedTarget);
+  while (exactIndex !== -1) {
+    const lineStart = normalizedContent.lastIndexOf("\n", exactIndex - 1) + 1;
+    const prefix = normalizedContent.slice(lineStart, exactIndex);
+
+    // If prefix is empty (starts at beginning of line) or contains non-whitespace (inline edit),
+    // then it's a valid exact match.
+    // If prefix is only whitespace (e.g. "        "), target was missing line indentation,
+    // so line-trimmed matching should handle indentation preservation instead.
+    const isIndentationMismatch = prefix.length > 0 && /^\s+$/.test(prefix);
+
+    if (!isIndentationMismatch) {
+      const newContent =
+        normalizedContent.slice(0, exactIndex) +
+        normalizedReplacement +
+        normalizedContent.slice(exactIndex + normalizedTarget.length);
+      const finalContent = content.includes("\r\n") ? newContent.replace(/\n/g, "\r\n") : newContent;
+      return { success: true, newContent: finalContent };
+    }
+
+    exactIndex = normalizedContent.indexOf(normalizedTarget, exactIndex + 1);
+  }
+
+  // 2. Line-trimmed matching for indentation resilience
+  const contentLines = normalizedContent.split("\n");
+  const targetLines = normalizedTarget.split("\n");
+  const trimmedTargetLines = targetLines.map((l) => l.trim());
+
+  const firstNonEmptyTarget = targetLines.find((l) => l.trim().length > 0) || "";
+  const targetBaseIndent = firstNonEmptyTarget.match(/^\s*/)?.[0] || "";
+
+  let matchIndex = -1;
+  for (let i = 0; i <= contentLines.length - targetLines.length; i++) {
+    let matches = true;
+    for (let j = 0; j < targetLines.length; j++) {
+      if (contentLines[i + j].trim() !== trimmedTargetLines[j]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      matchIndex = i;
+      break;
+    }
+  }
+
+  if (matchIndex !== -1) {
+    const matchedContentLines = contentLines.slice(matchIndex, matchIndex + targetLines.length);
+    const firstNonEmptyContent = matchedContentLines.find((l) => l.trim().length > 0) || "";
+    const contentBaseIndent = firstNonEmptyContent.match(/^\s*/)?.[0] || "";
+
+    const replacementLines = normalizedReplacement.split("\n");
+    const adjustedReplacementLines = replacementLines.map((line) => {
+      if (!line.trim()) return "";
+      if (line.startsWith(targetBaseIndent)) {
+        return contentBaseIndent + line.slice(targetBaseIndent.length);
+      }
+      return contentBaseIndent + line.trimStart();
+    });
+
+    contentLines.splice(matchIndex, targetLines.length, ...adjustedReplacementLines);
+    const newContent = contentLines.join("\n");
+    const finalContent = content.includes("\r\n") ? newContent.replace(/\n/g, "\r\n") : newContent;
+    return { success: true, newContent: finalContent };
+  }
+
+  // 3. Fallback: return helpful error details
+  const firstLines = contentLines.slice(0, 10).join("\n");
+  return {
+    success: false,
+    error: `The targetText was not found in the file (even after normalizing line endings and trimming indentation).\nFirst 10 lines of file:\n---\n${firstLines}\n---\nTarget requested:\n---\n${normalizedTarget}\n---`,
+  };
+}
+
 export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: () => void, rlInterface?: any) => tool({
   description: "Edit an existing file by replacing a specific block of text with new text. YOU MUST USE THIS TOOL TO EDIT FILES INSTEAD OF OUTPUTTING CODE BLOCKS. IMPORTANT: You MUST first read the file with readFile to know its exact current content before attempting an edit.",
   parameters: z.object({
@@ -238,22 +377,16 @@ export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: 
     }
 
     try {
-      let content = await fs.readFile(absolutePath, "utf-8");
-      
-      // Normalize line endings for cross-platform compatibility
-      const normalizedContent = content.replace(/\r\n/g, "\n");
-      const normalizedTarget = targetText.replace(/\r\n/g, "\n");
-      
-      if (!normalizedContent.includes(normalizedTarget)) {
-        // Provide helpful context: show first few lines of file so AI can self-correct
-        const firstLines = normalizedContent.split("\n").slice(0, 10).join("\n");
-        return `Error: The targetText was not found in the file. The file's first 10 lines are:\n---\n${firstLines}\n---\nMake sure your targetText is an EXACT substring of the file's current content. Use readFile first to see the full content.`;
+      const content = await fs.readFile(absolutePath, "utf-8");
+      const editResult = applyFileEdit(content, targetText, replacementText);
+
+      if (!editResult.success || editResult.newContent === undefined) {
+        return `Error: ${editResult.error || "The targetText was not found in the file."}`;
       }
-      
-      const newContent = normalizedContent.replace(normalizedTarget, replacementText);
+
       await recordSnapshot(filePath);
-      await fs.writeFile(absolutePath, newContent, "utf-8");
-      
+      await fs.writeFile(absolutePath, editResult.newContent, "utf-8");
+
       return `File successfully edited. Replaced the specified text block in ${filePath}.`;
     } catch (error: any) {
       return `Error editing file: ${error.message}`;
