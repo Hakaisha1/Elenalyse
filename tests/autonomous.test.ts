@@ -263,8 +263,8 @@ Analysis finished.`;
   });
 
   describe("Autonomous Analysis Protocol & Configuration", () => {
-    it("exports MAX_AUTONOMOUS_STEPS set to 15", () => {
-      expect(MAX_AUTONOMOUS_STEPS).toBe(15);
+    it("exports MAX_AUTONOMOUS_STEPS set to 25", () => {
+      expect(MAX_AUTONOMOUS_STEPS).toBe(25);
     });
 
     it("injects [AUTONOMOUS ANALYSIS PROTOCOL] directive into persona prompts", async () => {

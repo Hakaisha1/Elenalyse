@@ -6,6 +6,7 @@ import { Persona } from "./personas.js";
 const configPath = path.join(os.homedir(), ".elenalyserc.json");
 
 export type Provider = "openrouter" | "openai" | "local" | "google";
+export type MemoryMode = "default" | "amnesia" | "focus";
 
 export interface Config {
   activePersona: Persona;
@@ -14,6 +15,9 @@ export interface Config {
   fallbackProvider?: Provider;
   fallbackModel?: string;
   apiKeys?: Record<string, string>;
+  memoryMode?: MemoryMode;
+  maxSteps?: number;
+  voiceEnabled?: boolean;
 }
 
 export function isFailoverError(error: any): boolean {
@@ -66,7 +70,9 @@ export async function executeWithFailover<T>(
 const defaultConfig: Config = {
   activePersona: "eli",
   provider: "openrouter",
-  model: "openrouter/free"
+  model: "openrouter/free",
+  memoryMode: "default",
+  maxSteps: 25,
 };
 
 export function getConfig(): Config {

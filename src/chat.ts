@@ -8,21 +8,36 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import sound from "sound-play";
-import { getConfig, setConfig, isFailoverError, executeWithFailover, Provider } from "./config.js";
-export { isFailoverError, executeWithFailover };
+import { getConfig, setConfig, isFailoverError, executeWithFailover, Provider, MemoryMode } from "./config.js";
+export { isFailoverError, executeWithFailover, MemoryMode };
 import { getPersonaPrompt, getPersonaColor, PERSONA_SPEAKER_MAP } from "./personas.js";
 import { readFileTool, listDirTool, gitStatusTool, gitDiffTool, searchCodeTool, findFilesTool, createRunCommandTool, createWriteFileTool, createEditFileTool } from "./tools.js";
 import { ensureEngineDownloaded, ensureEngineRunning } from "./voiceEngine.js";
 import { synthesizeSpeech } from "./tts.js";
 import { undoLastChange } from "./undo.js";
 import { saveSession, loadSession, listSessions } from "./session.js";
-import { renderWelcomeBanner, printWelcomeBanner } from "./ui/banner.js";
+import { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox } from "./ui/banner.js";
 import { interactivePrompt } from "./ui/prompt.js";
-export { renderWelcomeBanner, printWelcomeBanner, interactivePrompt };
+export { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox, interactivePrompt };
 import { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall } from "./toolParser.js";
 export { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall };
 
-export const MAX_AUTONOMOUS_STEPS = 15;
+export const MAX_AUTONOMOUS_STEPS = 25;
+
+export function getAutonomousStepLimitPrompt(): string {
+  return "[System: Autonomous step limit reached. You MUST formulate and output your complete, comprehensive final report to the user now in Markdown. DO NOT call any more tools or output <tool_call> tags.]";
+}
+
+export function getSummaryRecoveryPrompt(toolResult?: { toolName: string; output: string }): string {
+  if (toolResult && toolResult.toolName) {
+    return `[System: Tool "${toolResult.toolName}" result:\n${toolResult.output}\n\nDo not call any more tools. Deliver your complete analysis report now based on all files inspected above.]`;
+  }
+  return "[System: Previous response only contained a tool call. Do not call tools. Deliver your complete analysis report now based on all files inspected above.]";
+}
+
+export function getFinalSummaryFallbackText(stepCount: number): string {
+  return `Analysis completed across ${stepCount} steps. Please ask specific questions about the inspected files.`;
+}
 
 export function formatToolArgs(args: Record<string, any>): string {
   if (!args || Object.keys(args).length === 0) return "";
@@ -198,8 +213,9 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
         let finalText = "";
         let totalPromptTokens = 0;
         let totalCompletionTokens = 0;
+        const maxSteps = config.maxSteps || MAX_AUTONOMOUS_STEPS;
 
-        for (let step = 1; step <= MAX_AUTONOMOUS_STEPS; step++) {
+        for (let step = 1; step <= maxSteps; step++) {
           const genResult = await generateText({
             model: aiClientFactory,
             system: systemPrompt,
@@ -218,7 +234,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
           if (genResult.toolCalls && genResult.toolCalls.length > 0) {
             const tc = genResult.toolCalls[0];
             const argsSummary = formatToolArgs((tc as any).args || {});
-            spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${MAX_AUTONOMOUS_STEPS}]...`;
+            spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
 
             if (genResult.response && genResult.response.messages) {
               currentMessages.push(...genResult.response.messages);
@@ -247,7 +263,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
               previousToolCallsStr = toolCallSig;
 
               const argsSummary = formatToolArgs(tc.args);
-              spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${MAX_AUTONOMOUS_STEPS}]...`;
+              spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
 
               const toolOutput = await executeToolDirectly(tc.toolName, tc.args, toolsMap);
               combinedToolOutputs += `[System Tool Result for "${tc.toolName}"]:\n${toolOutput}\n\n`;
@@ -277,6 +293,8 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
         spinner.stop();
 
         if (!finalText && currentMessages.length > 1) {
+          spinner.start("Generating final summary...");
+          // Stage 1: Formulate with strict autonomous step limit prompt
           const finalSummaryRun = await generateText({
             model: aiClientFactory,
             system: systemPrompt,
@@ -284,15 +302,49 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
               ...currentMessages,
               {
                 role: "user",
-                content: "[System: Max analysis steps reached. Please provide your final comprehensive summary based on all findings so far.]",
+                content: getAutonomousStepLimitPrompt(),
               },
             ],
           });
-          finalText = stripToolCallTags(finalSummaryRun.text || "");
           if (finalSummaryRun.usage) {
             totalPromptTokens += (finalSummaryRun.usage as any).promptTokens || 0;
             totalCompletionTokens += (finalSummaryRun.usage as any).completionTokens || 0;
           }
+          finalText = stripToolCallTags(finalSummaryRun.text || "").trim();
+
+          // Stage 2: If model returned another tool call or empty text
+          if (!finalText) {
+            const { toolCalls: recToolCalls } = extractTextToolCalls(finalSummaryRun.text || "");
+            let recResult: { toolName: string; output: string } | undefined;
+            if (recToolCalls.length > 0) {
+              const recTool = recToolCalls[0];
+              const recOutput = await executeToolDirectly(recTool.toolName, recTool.args, toolsMap);
+              recResult = { toolName: recTool.toolName, output: recOutput };
+            }
+
+            const recRun = await generateText({
+              model: aiClientFactory,
+              system: systemPrompt,
+              messages: [
+                ...currentMessages,
+                {
+                  role: "user",
+                  content: getSummaryRecoveryPrompt(recResult),
+                },
+              ],
+            });
+            if (recRun.usage) {
+              totalPromptTokens += (recRun.usage as any).promptTokens || 0;
+              totalCompletionTokens += (recRun.usage as any).completionTokens || 0;
+            }
+            finalText = stripToolCallTags(recRun.text || "").trim();
+          }
+
+          // Stage 3: Fallback if still empty to prevent dead silence
+          if (!finalText) {
+            finalText = getFinalSummaryFallbackText(maxSteps);
+          }
+          spinner.stop();
         }
 
         console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + finalText);
@@ -428,8 +480,6 @@ export function popLastTurnForRetry(messages: any[]): { success: boolean; lastUs
   return { success: false };
 }
 
-export type MemoryMode = "default" | "amnesia" | "focus";
-
 export const MEMORY_LIMITS: Record<MemoryMode, number> = {
   amnesia: 10,
   default: 40,
@@ -463,12 +513,14 @@ export function trimMemory(
 export async function startInteractiveChat(
   voiceEnabled: boolean = false,
   debug: boolean = false,
-  memoryMode: MemoryMode = "default"
+  memoryMode?: MemoryMode
 ) {
   let config = getConfig();
   let activePersona = config.activePersona;
   let provider = config.provider;
   let model = config.model;
+  let activeMemoryMode: MemoryMode = memoryMode || config.memoryMode || "default";
+  let activeVoiceEnabled: boolean = voiceEnabled || config.voiceEnabled || false;
   
   const showBanner = () => {
     printWelcomeBanner({
@@ -477,8 +529,8 @@ export async function startInteractiveChat(
       model,
       fallbackProvider: config.fallbackProvider,
       fallbackModel: config.fallbackModel,
-      memoryMode,
-      voiceEnabled,
+      memoryMode: activeMemoryMode,
+      voiceEnabled: activeVoiceEnabled,
     });
   };
 
@@ -539,9 +591,73 @@ export async function startInteractiveChat(
       continue;
     }
 
+    if (input.startsWith("/setting") || input.startsWith("/settings")) {
+      const parts = input.trim().split(/\s+/);
+      const subCommand = parts[1]?.toLowerCase();
+      const val = parts[2]?.toLowerCase();
+
+      if (!subCommand || subCommand === "show") {
+        console.log("\n" + renderSettingsBox({
+          memoryMode: activeMemoryMode,
+          maxSteps: config.maxSteps || MAX_AUTONOMOUS_STEPS,
+          provider,
+          model,
+          fallbackProvider: config.fallbackProvider,
+          fallbackModel: config.fallbackModel,
+          voiceEnabled: activeVoiceEnabled,
+        }) + "\n");
+        continue;
+      }
+
+      if (subCommand === "memory") {
+        if (["amnesia", "default", "focus"].includes(val)) {
+          activeMemoryMode = val as MemoryMode;
+          config.memoryMode = activeMemoryMode;
+          setConfig(config);
+          console.log(chalk.green(`[ℹ] Memory mode updated to '${activeMemoryMode}' (${MEMORY_LIMITS[activeMemoryMode]} messages limit).`));
+        } else {
+          console.log(chalk.red("Invalid memory mode! Use: /setting memory <amnesia|default|focus>"));
+        }
+        continue;
+      }
+
+      if (subCommand === "steps") {
+        const parsedSteps = parseInt(val, 10);
+        if (!isNaN(parsedSteps) && parsedSteps >= 1 && parsedSteps <= 100) {
+          config.maxSteps = parsedSteps;
+          setConfig(config);
+          console.log(chalk.green(`[ℹ] Maximum autonomous inspection steps updated to ${parsedSteps}.`));
+        } else {
+          console.log(chalk.red("Invalid steps value! Use: /setting steps <number between 1 and 100> (e.g. 15, 25, 40)"));
+        }
+        continue;
+      }
+
+      if (subCommand === "voice") {
+        if (val === "on" || val === "true" || val === "enable") {
+          activeVoiceEnabled = true;
+          config.voiceEnabled = true;
+          setConfig(config);
+          console.log(chalk.green("[ℹ] Voice synthesis enabled (VOICEVOX Engine)."));
+        } else if (val === "off" || val === "false" || val === "disable") {
+          activeVoiceEnabled = false;
+          config.voiceEnabled = false;
+          setConfig(config);
+          console.log(chalk.yellow("[ℹ] Voice synthesis disabled (Text only)."));
+        } else {
+          console.log(chalk.red("Invalid voice setting! Use: /setting voice <on|off>"));
+        }
+        continue;
+      }
+
+      console.log(chalk.red("Unknown setting command! Use: /setting [show|memory|steps|voice]"));
+      continue;
+    }
+
     if (input.startsWith("/help")) {
       console.log(chalk.cyan("\nAvailable Commands:"));
       console.log(chalk.cyan("  /help                : Show this help menu"));
+      console.log(chalk.cyan("  /setting [show|..]   : Configure runtime settings (memory, steps, voice)"));
       console.log(chalk.cyan("  /persona <name>      : Change persona (eli/rei/sora/rin)"));
       console.log(chalk.cyan("  /model <name>        : Change model (e.g., gemini-3.5-flash-lite)"));
       console.log(chalk.cyan("  /provider <name>     : Change provider (google/openai/openrouter/local)"));
@@ -772,7 +888,7 @@ export async function startInteractiveChat(
           const aiModel = await getAiClient(runProvider, runModel, config);
 
           // Trim memory before sending to API
-          memory[activePersona] = trimMemory(memory[activePersona], memoryMode, debug);
+          memory[activePersona] = trimMemory(memory[activePersona], activeMemoryMode, debug);
 
           const toolsMap = {
             readFile: readFileTool,
@@ -803,14 +919,15 @@ export async function startInteractiveChat(
           let finalText = "";
           let totalPromptTokens = 0;
           let totalCompletionTokens = 0;
+          const maxSteps = config.maxSteps || MAX_AUTONOMOUS_STEPS;
 
-          for (let step = 1; step <= MAX_AUTONOMOUS_STEPS; step++) {
+          for (let step = 1; step <= maxSteps; step++) {
             if (isAborted) break;
 
             const genResult = await generateText({
               model: aiModel,
               abortSignal: abortController.signal,
-              system: await getPersonaPrompt(activePersona, voiceEnabled),
+              system: await getPersonaPrompt(activePersona, activeVoiceEnabled),
               messages: currentMessages,
               tools: toolsMap,
               // @ts-ignore
@@ -834,7 +951,7 @@ export async function startInteractiveChat(
 
               const tc = genResult.toolCalls[0];
               const argsSummary = formatToolArgs((tc as any).args || {});
-              spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${MAX_AUTONOMOUS_STEPS}]...`;
+              spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
 
               if (genResult.response && genResult.response.messages) {
                 currentMessages.push(...genResult.response.messages);
@@ -863,7 +980,7 @@ export async function startInteractiveChat(
                 previousToolCallsStr = toolCallSig;
 
                 const argsSummary = formatToolArgs(tc.args);
-                spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${MAX_AUTONOMOUS_STEPS}]...`;
+                spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
 
                 const filePath = tc.args?.filePath || tc.args?.dirPath;
                 if (filePath && typeof filePath === "string") {
@@ -902,25 +1019,60 @@ export async function startInteractiveChat(
           spinner.stop();
 
           if (!finalText && currentMessages.length > memory[activePersona].length && !isAborted) {
-            spinner.start(`Generating final summary...`);
+            spinner.start("Generating final summary...");
+            // Stage 1: Formulate with strict autonomous step limit prompt
             const finalSummaryRun = await generateText({
               model: aiModel,
               abortSignal: abortController.signal,
-              system: await getPersonaPrompt(activePersona, voiceEnabled),
+              system: await getPersonaPrompt(activePersona, activeVoiceEnabled),
               messages: [
                 ...currentMessages,
                 {
                   role: "user",
-                  content: "[System: Max analysis steps reached. Please provide your final comprehensive summary based on all findings so far.]",
+                  content: getAutonomousStepLimitPrompt(),
                 },
               ],
             });
-            spinner.stop();
-            finalText = stripToolCallTags(finalSummaryRun.text || "");
             if (finalSummaryRun.usage) {
               totalPromptTokens += (finalSummaryRun.usage as any).promptTokens || 0;
               totalCompletionTokens += (finalSummaryRun.usage as any).completionTokens || 0;
             }
+            finalText = stripToolCallTags(finalSummaryRun.text || "").trim();
+
+            // Stage 2: If model returned another tool call or empty text
+            if (!finalText) {
+              const { toolCalls: recToolCalls } = extractTextToolCalls(finalSummaryRun.text || "");
+              let recResult: { toolName: string; output: string } | undefined;
+              if (recToolCalls.length > 0) {
+                const recTool = recToolCalls[0];
+                const recOutput = await executeToolDirectly(recTool.toolName, recTool.args, toolsMap);
+                recResult = { toolName: recTool.toolName, output: recOutput };
+              }
+
+              const recRun = await generateText({
+                model: aiModel,
+                abortSignal: abortController.signal,
+                system: await getPersonaPrompt(activePersona, activeVoiceEnabled),
+                messages: [
+                  ...currentMessages,
+                  {
+                    role: "user",
+                    content: getSummaryRecoveryPrompt(recResult),
+                  },
+                ],
+              });
+              if (recRun.usage) {
+                totalPromptTokens += (recRun.usage as any).promptTokens || 0;
+                totalCompletionTokens += (recRun.usage as any).completionTokens || 0;
+              }
+              finalText = stripToolCallTags(recRun.text || "").trim();
+            }
+
+            // Stage 3: Fallback if still empty to prevent dead silence
+            if (!finalText) {
+              finalText = getFinalSummaryFallbackText(maxSteps);
+            }
+            spinner.stop();
             currentMessages.push({
               role: "assistant",
               content: stripVoiceTags(finalText),
@@ -948,7 +1100,7 @@ export async function startInteractiveChat(
           }
           console.log("");
 
-          if (voiceEnabled && voiceLines.length > 0) {
+          if (activeVoiceEnabled && voiceLines.length > 0) {
             const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
             playVoiceLines(voiceLines, speakerId); // Fire and forget
           }

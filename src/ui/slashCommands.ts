@@ -26,6 +26,11 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: "Show available commands and usage guide",
   },
   {
+    command: "/setting",
+    syntax: "/setting [memory|steps|voice|show] [value]",
+    description: "Configure runtime settings (memory mode, autonomous steps, voice, etc.)",
+  },
+  {
     command: "/persona",
     syntax: "/persona <eli|rei|sora|rin>",
     description: "Switch active persona with context handoff",
@@ -245,6 +250,90 @@ export const MODEL_SUGGESTIONS: SuggestionItem[] = [
   },
 ];
 
+export const SETTING_SUBCOMMANDS: SuggestionItem[] = [
+  {
+    value: "show",
+    label: "show",
+    command: "show",
+    description: "Display current configuration and active limits",
+  },
+  {
+    value: "memory",
+    label: "memory",
+    command: "memory",
+    description: "Configure memory context window trimming limit",
+  },
+  {
+    value: "steps",
+    label: "steps",
+    command: "steps",
+    description: "Configure maximum autonomous agent inspection steps",
+  },
+  {
+    value: "voice",
+    label: "voice",
+    command: "voice",
+    description: "Toggle Japanese TTS audio engine on or off",
+  },
+];
+
+export const SETTING_MEMORY_SUBCOMMANDS: SuggestionItem[] = [
+  {
+    value: "amnesia",
+    label: "amnesia",
+    command: "amnesia",
+    description: "Extreme economy mode (10 messages limit)",
+  },
+  {
+    value: "default",
+    label: "default",
+    command: "default",
+    description: "Balanced mode (40 messages limit)",
+  },
+  {
+    value: "focus",
+    label: "focus",
+    command: "focus",
+    description: "Full context mode (100 messages limit)",
+  },
+];
+
+export const SETTING_STEPS_SUBCOMMANDS: SuggestionItem[] = [
+  {
+    value: "15",
+    label: "15",
+    command: "15",
+    description: "Quick analysis (15 steps)",
+  },
+  {
+    value: "25",
+    label: "25",
+    command: "25",
+    description: "Standard balanced audit (25 steps - recommended)",
+  },
+  {
+    value: "40",
+    label: "40",
+    command: "40",
+    description: "Deep repository audit (40 steps)",
+  },
+];
+
+export const SETTING_VOICE_SUBCOMMANDS: SuggestionItem[] = [
+  {
+    value: "on",
+    label: "on",
+    command: "on",
+    description: "Enable VOICEVOX speech synthesis",
+  },
+  {
+    value: "off",
+    label: "off",
+    command: "off",
+    description: "Text-only responses",
+  },
+];
+
 export const TOP_LEVEL_COMMANDS: SuggestionItem[] = SLASH_COMMANDS.map((c) => ({
   value: c.command,
   label: c.command,
@@ -289,6 +378,102 @@ export function getContextualSuggestions(
       ? PERSONA_SUBCOMMANDS.filter((p) => p.value.toLowerCase().startsWith(query))
       : [...PERSONA_SUBCOMMANDS];
     return { title: "Select Persona", items };
+  }
+
+  // Level 2 & 3: /setting [memory|steps|voice|show]
+  if (baseCmd === "/setting" || baseCmd === "/settings") {
+    const subToken = tokens[1]?.toLowerCase();
+
+    if (subToken === "memory") {
+      if (tokens.length === 2 && !endsWithSpace) {
+        return {
+          title: "Settings Menu",
+          items: SETTING_SUBCOMMANDS.filter((s) =>
+            s.value.toLowerCase().startsWith("memory")
+          ),
+        };
+      }
+      const query = endsWithSpace
+        ? tokens.length > 3
+          ? tokens[tokens.length - 1].toLowerCase()
+          : ""
+        : tokens[2]?.toLowerCase() || "";
+      const items = query
+        ? SETTING_MEMORY_SUBCOMMANDS.filter((m) =>
+            m.value.toLowerCase().startsWith(query)
+          )
+        : [...SETTING_MEMORY_SUBCOMMANDS];
+      return { title: "Select Memory Mode", items };
+    }
+
+    if (subToken === "steps") {
+      if (tokens.length === 2 && !endsWithSpace) {
+        return {
+          title: "Settings Menu",
+          items: SETTING_SUBCOMMANDS.filter((s) =>
+            s.value.toLowerCase().startsWith("steps")
+          ),
+        };
+      }
+      const query = endsWithSpace
+        ? tokens.length > 3
+          ? tokens[tokens.length - 1].toLowerCase()
+          : ""
+        : tokens[2]?.toLowerCase() || "";
+      const items = query
+        ? SETTING_STEPS_SUBCOMMANDS.filter((s) =>
+            s.value.toLowerCase().startsWith(query)
+          )
+        : [...SETTING_STEPS_SUBCOMMANDS];
+      return { title: "Select Max Autonomous Steps", items };
+    }
+
+    if (subToken === "voice") {
+      if (tokens.length === 2 && !endsWithSpace) {
+        return {
+          title: "Settings Menu",
+          items: SETTING_SUBCOMMANDS.filter((s) =>
+            s.value.toLowerCase().startsWith("voice")
+          ),
+        };
+      }
+      const query = endsWithSpace
+        ? tokens.length > 3
+          ? tokens[tokens.length - 1].toLowerCase()
+          : ""
+        : tokens[2]?.toLowerCase() || "";
+      const items = query
+        ? SETTING_VOICE_SUBCOMMANDS.filter((v) =>
+            v.value.toLowerCase().startsWith(query)
+          )
+        : [...SETTING_VOICE_SUBCOMMANDS];
+      return { title: "Toggle Voice Synthesis", items };
+    }
+
+    if (subToken === "show") {
+      if (tokens.length === 2 && !endsWithSpace) {
+        return {
+          title: "Settings Menu",
+          items: SETTING_SUBCOMMANDS.filter((s) =>
+            s.value.toLowerCase().startsWith("show")
+          ),
+        };
+      }
+      return { title: "Settings Menu", items: [] };
+    }
+
+    // Level 2: /setting ...
+    const query = endsWithSpace
+      ? tokens.length > 2
+        ? tokens[tokens.length - 1].toLowerCase()
+        : ""
+      : tokens[1]?.toLowerCase() || "";
+    const items = query
+      ? SETTING_SUBCOMMANDS.filter((s) =>
+          s.value.toLowerCase().startsWith(query)
+        )
+      : [...SETTING_SUBCOMMANDS];
+    return { title: "Settings Menu", items };
   }
 
   // Level 2 & 3: /provider [fallback]
@@ -452,7 +637,7 @@ export function completeSlashCommand(
   const endsWithSpace = input.endsWith(" ");
   const parts = input.trim().split(/\s+/);
 
-  if (endsWithSpace) {
+  if (endsWithSpace || parts.length <= 1) {
     return `${trimmed} ${value}`;
   } else {
     parts[parts.length - 1] = value;
