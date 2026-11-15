@@ -341,5 +341,17 @@ describe("Modern UI / UX Suite", () => {
     it("returns empty array when suggestions list is empty", () => {
       expect(renderDropdownLines([], 0)).toEqual([]);
     });
+
+    it("verifies exact match condition for dropdown auto-dismissal", () => {
+      const partySuggestions = getContextualSuggestions("/party");
+      expect(partySuggestions.items.length).toBe(1);
+      const isExactMatch = partySuggestions.items.length === 1 && partySuggestions.items[0].value === "/party";
+      expect(isExactMatch).toBe(true);
+
+      const partialSuggestions = getContextualSuggestions("/par");
+      expect(partialSuggestions.items.length).toBe(1);
+      const isPartialExact = partialSuggestions.items.length === 1 && partialSuggestions.items[0].value === "/par";
+      expect(isPartialExact).toBe(false);
+    });
   });
 });

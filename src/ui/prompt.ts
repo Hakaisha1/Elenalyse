@@ -83,6 +83,7 @@ export async function interactivePrompt(
     let cursor = 0;
     let selectedIndex = 0;
     let dropdownActive = false;
+    let userNavigated = false;
     let dropdownTitle = "Available Commands";
     let filtered: SuggestionItem[] = [];
     let previousDropdownHeight = 0;
@@ -96,15 +97,22 @@ export async function interactivePrompt(
 
     const clearDropdown = () => {
       if (previousDropdownHeight > 0) {
-        stdout.write("\x1b[s\x1b[1B\x1b[J\x1b[u");
+        stdout.write("\r\x1b[J" + promptPrefix + buffer);
+        const colOffset = promptLen + cursor;
+        if (colOffset > 0) {
+          stdout.write(`\r\x1b[${colOffset}C`);
+        } else {
+          stdout.write("\r");
+        }
         previousDropdownHeight = 0;
       }
     };
 
     const render = () => {
-      // Redraw prompt line
-      stdout.write("\r\x1b[2K" + promptPrefix + buffer);
+      // 1. Clear everything from the prompt line downwards and redraw prompt line
+      stdout.write("\r\x1b[J" + promptPrefix + buffer);
 
+      // 2. If dropdown is active and there are items, draw them below and return cursor
       if (dropdownActive && filtered.length > 0) {
         const dropdownLines = renderDropdownLines(
           filtered,
@@ -113,14 +121,19 @@ export async function interactivePrompt(
         );
         previousDropdownHeight = dropdownLines.length;
 
-        stdout.write("\x1b[s");
-        stdout.write("\n" + dropdownLines.join("\n") + "\x1b[J");
-        stdout.write("\x1b[u");
-        stdout.write(`\r\x1b[${promptLen + cursor}C`);
+        stdout.write("\n" + dropdownLines.join("\n"));
+        // Move cursor back up to the prompt line
+        stdout.write(`\x1b[${dropdownLines.length}A`);
       } else {
-        stdout.write("\x1b[s\x1b[1B\x1b[J\x1b[u");
         previousDropdownHeight = 0;
-        stdout.write(`\r\x1b[${promptLen + cursor}C`);
+      }
+
+      // 3. Position cursor at the exact typing column on the prompt line
+      const colOffset = promptLen + cursor;
+      if (colOffset > 0) {
+        stdout.write(`\r\x1b[${colOffset}C`);
+      } else {
+        stdout.write("\r");
       }
     };
 
@@ -129,7 +142,14 @@ export async function interactivePrompt(
         const res = getContextualSuggestions(buffer);
         dropdownTitle = res.title;
         filtered = res.items;
-        dropdownActive = filtered.length > 0;
+
+        const trimmed = buffer.trim();
+        // Auto-dismiss if input already matches a single suggestion exactly
+        const isExactMatch =
+          filtered.length === 1 &&
+          (trimmed === filtered[0].value || trimmed.endsWith(" " + filtered[0].value));
+
+        dropdownActive = filtered.length > 0 && !isExactMatch;
         if (selectedIndex >= filtered.length) {
           selectedIndex = 0;
         }
@@ -143,10 +163,9 @@ export async function interactivePrompt(
     render();
 
     const cleanup = () => {
-      clearDropdown();
+      stdout.write("\r\x1b[J" + promptPrefix + buffer + "\n");
       stdin.removeListener("keypress", onKeypress);
       stdin.setRawMode(false);
-      stdout.write("\n");
     };
 
     const onKeypress = (str: string, key: any) => {
@@ -154,6 +173,7 @@ export async function interactivePrompt(
         if (str && str.length === 1) {
           buffer = buffer.slice(0, cursor) + str + buffer.slice(cursor);
           cursor++;
+          userNavigated = false;
           updateDropdown();
           render();
         }
@@ -176,6 +196,7 @@ export async function interactivePrompt(
       // Escape
       if (key.name === "escape") {
         dropdownActive = false;
+        userNavigated = false;
         render();
         return;
       }
@@ -183,6 +204,7 @@ export async function interactivePrompt(
       // Up arrow
       if (key.name === "up") {
         if (dropdownActive && filtered.length > 0) {
+          userNavigated = true;
           selectedIndex = getNextIndex(selectedIndex, filtered.length, "up");
           render();
           return;
@@ -192,6 +214,7 @@ export async function interactivePrompt(
       // Down arrow
       if (key.name === "down") {
         if (dropdownActive && filtered.length > 0) {
+          userNavigated = true;
           selectedIndex = getNextIndex(selectedIndex, filtered.length, "down");
           render();
           return;
@@ -204,6 +227,7 @@ export async function interactivePrompt(
           const chosen = filtered[selectedIndex];
           buffer = completeSlashCommand(buffer, chosen);
           cursor = buffer.length;
+          userNavigated = false;
           updateDropdown();
           render();
           return;
@@ -212,14 +236,17 @@ export async function interactivePrompt(
 
       // Enter key
       if (key.name === "return" || key.name === "enter") {
+        // If dropdown is active and user actively navigated to an option with arrow keys
         if (
           dropdownActive &&
+          userNavigated &&
           filtered.length > 0 &&
           !filtered.some((c) => buffer.trim().endsWith(c.value))
         ) {
           const chosen = filtered[selectedIndex];
           buffer = completeSlashCommand(buffer, chosen);
           cursor = buffer.length;
+          userNavigated = false;
           updateDropdown();
           render();
           return;
@@ -235,6 +262,7 @@ export async function interactivePrompt(
         if (cursor > 0) {
           buffer = buffer.slice(0, cursor - 1) + buffer.slice(cursor);
           cursor--;
+          userNavigated = false;
           updateDropdown();
           render();
         }
@@ -245,6 +273,7 @@ export async function interactivePrompt(
       if (key.name === "delete") {
         if (cursor < buffer.length) {
           buffer = buffer.slice(0, cursor) + buffer.slice(cursor + 1);
+          userNavigated = false;
           updateDropdown();
           render();
         }
@@ -273,6 +302,7 @@ export async function interactivePrompt(
       if (str && !key.ctrl && !key.meta) {
         buffer = buffer.slice(0, cursor) + str + buffer.slice(cursor);
         cursor += str.length;
+        userNavigated = false;
         updateDropdown();
         render();
       }
