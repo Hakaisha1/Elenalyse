@@ -76,9 +76,35 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: "Clear terminal screen and show banner",
   },
   {
+    command: "/fix",
+    syntax: "/fix [blockers|majors|all|<issue>]",
+    description: "Automatically execute fixes for issues identified in the latest audit",
+  },
+  {
     command: "/exit",
     syntax: "/exit",
     description: "Exit the application",
+  },
+];
+
+export const FIX_SUBCOMMANDS: SuggestionItem[] = [
+  {
+    value: "blockers",
+    label: "blockers",
+    command: "blockers",
+    description: "Fix critical blockers detected in latest audit report",
+  },
+  {
+    value: "majors",
+    label: "majors",
+    command: "majors",
+    description: "Fix major architectural and security issues",
+  },
+  {
+    value: "all",
+    label: "all",
+    command: "all",
+    description: "Execute fixes for all identified issues sequentially",
   },
 ];
 
@@ -361,6 +387,7 @@ const ALL_COMMAND_NAMES = new Set([
   "/api",
   "/undo",
   "/session",
+  "/fix",
   "/paste",
   "/retry",
   "/clear",
@@ -412,6 +439,18 @@ export function getContextualSuggestions(
       ? PERSONA_SUBCOMMANDS.filter((p) => p.value.toLowerCase().startsWith(query))
       : [...PERSONA_SUBCOMMANDS];
     return { title: "Select Persona", items };
+  }
+
+  // Level 2: /fix [blockers|majors|all|<issue>]
+  if (baseCmd === "/fix") {
+    if (parts.length > 2 || (parts.length === 2 && endsWithSpace)) {
+      return { title: "Fix Target", items: [] };
+    }
+    const query = parts.length === 2 && !endsWithSpace ? parts[1].toLowerCase() : "";
+    const items = query
+      ? FIX_SUBCOMMANDS.filter((f) => f.value.toLowerCase().startsWith(query))
+      : [...FIX_SUBCOMMANDS];
+    return { title: "Fix Target", items };
   }
 
   // Level 2 & 3: /setting [memory|steps|voice|show]

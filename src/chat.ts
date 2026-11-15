@@ -41,6 +41,11 @@ export function getFinalSummaryFallbackText(stepCount: number): string {
   return `Analysis completed across ${stepCount} steps. Please ask specific questions about the inspected files.`;
 }
 
+export function buildFixInstruction(target: string = "all"): string {
+  const cleanTarget = target.trim() || "all";
+  return `Please execute the necessary code edits using editFile and writeFile to resolve all [${cleanTarget}] identified in your previous audit report. Verify each change and inspect the diff.`;
+}
+
 export function formatToolArgs(args: Record<string, any>): string {
   if (!args || Object.keys(args).length === 0) return "";
   return Object.entries(args)
@@ -665,6 +670,7 @@ export async function startInteractiveChat(
       console.log(chalk.cyan("  /provider <name>     : Change provider (google/openai/openrouter/local)"));
       console.log(chalk.cyan("  /provider fallback <name> [model] : Set failover fallback provider"));
       console.log(chalk.cyan("  /api <prov> <key>    : Save API Key (e.g., /api google AIza...)"));
+      console.log(chalk.cyan("  /fix [blockers|..]   : Automatically execute fixes for audit issues"));
       console.log(chalk.cyan("  /undo                : Undo last file write or edit"));
       console.log(chalk.cyan("  /paste               : Enter multi-line paste mode (end with 'END')"));
       console.log(chalk.cyan("  /retry               : Retry the last prompt"));
@@ -858,6 +864,11 @@ export async function startInteractiveChat(
       }
       finalInput = lastUserPrompt;
       console.log(chalk.cyan(`[ℹ] Retrying: "${finalInput.length > 50 ? finalInput.slice(0, 50) + "..." : finalInput}"`));
+    } else if (input.startsWith("/fix")) {
+      const rest = input.slice(4).trim();
+      const target = rest || "all";
+      finalInput = buildFixInstruction(target);
+      console.log(chalk.cyan(`[ℹ] Initiating autonomous fix for [${target}]...`));
     }
 
     lastUserPrompt = finalInput;
@@ -921,7 +932,9 @@ export async function startInteractiveChat(
           let finalText = "";
           let totalPromptTokens = 0;
           let totalCompletionTokens = 0;
-          const maxSteps = config.maxSteps || MAX_AUTONOMOUS_STEPS;
+          const maxSteps = input.startsWith("/fix")
+            ? Math.max(25, config.maxSteps || MAX_AUTONOMOUS_STEPS)
+            : (config.maxSteps || MAX_AUTONOMOUS_STEPS);
 
           for (let step = 1; step <= maxSteps; step++) {
             if (isAborted) break;
