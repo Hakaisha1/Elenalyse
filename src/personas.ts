@@ -113,3 +113,40 @@ export const PERSONA_SPEAKER_MAP: Record<Persona, number> = {
   sora: 29,  // No.7 - Cheerful, energetic, creative (Deredere).
   rin: 7,   // Zundamon (Tsundere) - Strict, harsh, but helpful (Tsundere).
 };
+
+export function getPartyPersonaPrompt(
+  persona: Persona,
+  task: string,
+  sharedContext: string
+): string {
+  const base = personas[persona] || personas.eli;
+
+  const roleDirectives: Record<Persona, string> = {
+    eli: `[PARTY MODE ROLE: LEAD COORDINATOR & SYNTHESIZER]
+You are ELI, the Lead Coordinator of the Elenalyse Quartet.
+You have received independent analytical reports from RIN (Security/Bugs), REI (Architecture/Performance), and SORA (Creativity/UX).
+Your goal is to synthesize their findings into a unified, empathetic, and actionable action plan.
+Resolve any conflicting advice, eliminate duplicates, and provide clear step-by-step next steps prioritized by importance.`,
+
+    rin: `[PARTY MODE ROLE: MERCILESS SECURITY & BUG AUDITOR]
+You are RIN, the Security and Error Auditor of the Elenalyse Quartet.
+Your objective in this party session is to ruthlessly discover security vulnerabilities, edge-case bugs, injection vectors, unhandled exceptions, and critical blockers.
+Be relentless, specific, and direct, citing problematic lines or patterns. Do not mince words.`,
+
+    rei: `[PARTY MODE ROLE: COLD ARCHITECTURE & PERFORMANCE OPTIMIZER]
+You are REI, the Architecture and Performance Specialist of the Elenalyse Quartet.
+Your objective in this party session is to critically evaluate code structure, modularity, algorithmic complexity, database interactions, and memory efficiency.
+Recommend minimal, elegant refactorings and measurable performance improvements without unnecessary fluff.`,
+
+    sora: `[PARTY MODE ROLE: ENTHUSIASTIC CREATIVE & UX INNOVATOR]
+You are SORA, the Creative and User Experience Innovator of the Elenalyse Quartet.
+Your objective in this party session is to explore user delight, developer experience polish, innovative new capabilities, ergonomic design, and future-forward enhancements.
+Bring boundless enthusiasm and inspiring ideas to elevate the project beyond just working code.`,
+  };
+
+  const directive = roleDirectives[persona] || roleDirectives.eli;
+  const taskSection = `[PARTY SESSION TASK]\n${task || "Comprehensive Codebase Analysis"}`;
+  const contextSection = sharedContext ? `\n\n[SHARED CONTEXT & CODEBASE SNAPSHOT]\n${sharedContext}` : "";
+
+  return `${base}\n\n${directive}\n\n${taskSection}${contextSection}\n\nDeliver your report in clear, structured Markdown.`;
+}

@@ -20,7 +20,8 @@ import { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox } from "./ui
 import { interactivePrompt } from "./ui/prompt.js";
 import { renderMarkdown } from "./ui/markdown.js";
 import { pruneMemoryToolResults } from "./memoryPruner.js";
-export { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox, interactivePrompt, renderMarkdown, pruneMemoryToolResults };
+import { renderTokenWarningBox, runPartyOrchestration } from "./party.js";
+export { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox, interactivePrompt, renderMarkdown, pruneMemoryToolResults, renderTokenWarningBox, runPartyOrchestration };
 import { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall } from "./toolParser.js";
 export { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall };
 
@@ -671,6 +672,7 @@ export async function startInteractiveChat(
       console.log(chalk.cyan("  /provider fallback <name> [model] : Set failover fallback provider"));
       console.log(chalk.cyan("  /api <prov> <key>    : Save API Key (e.g., /api google AIza...)"));
       console.log(chalk.cyan("  /fix [blockers|..]   : Automatically execute fixes for audit issues"));
+      console.log(chalk.cyan("  /party [audit|..]    : Orchestrate all 4 personas simultaneously (Token Intensive)"));
       console.log(chalk.cyan("  /undo                : Undo last file write or edit"));
       console.log(chalk.cyan("  /paste               : Enter multi-line paste mode (end with 'END')"));
       console.log(chalk.cyan("  /retry               : Retry the last prompt"));
@@ -827,6 +829,56 @@ export async function startInteractiveChat(
         console.log(chalk.gray(`[ℹ] Persona is already ${activePersona.toUpperCase()}`));
       } else {
         console.log(chalk.red("Invalid persona! Use: eli, rei, sora, rin"));
+      }
+      continue;
+    }
+
+    if (input.startsWith("/party")) {
+      const taskArg = input.slice(6).trim() || "Full Quartet audit (Security, Architecture, Creativity, Synthesis)";
+
+      console.log("\n" + renderTokenWarningBox() + "\n");
+      const answer = await rl.question(chalk.yellow("⚠️  Do you want to proceed with Party Mode orchestration? [Y/n]: "));
+      if (answer.trim().toLowerCase() !== "y" && answer.trim() !== "") {
+        console.log(chalk.yellow("[ℹ] Party Mode cancelled by user.\n"));
+        continue;
+      }
+
+      rl.pause();
+      const partySpinner = ora("✨ Party Mode: RIN, REI, and SORA analyzing simultaneously under ELI...").start();
+
+      try {
+        const aiModel = await getAiClient(provider, model, config);
+        const partyResult = await runPartyOrchestration({
+          task: taskArg,
+          aiClientFactory: aiModel,
+          onProgress: (status) => {
+            partySpinner.text = `✨ ${status}`;
+          },
+        });
+
+        partySpinner.stop();
+
+        if (partyResult.cancelled) {
+          console.log(chalk.yellow("[ℹ] " + partyResult.report + "\n"));
+        } else {
+          console.log("\n" + renderMarkdown(partyResult.report, "eli") + "\n");
+          console.log(chalk.gray(`[Token Usage: ${partyResult.totalTokens.promptTokens} input / ${partyResult.totalTokens.completionTokens} output]\n`));
+
+          // Save into conversation memory
+          memory[activePersona].push({
+            role: "user",
+            content: input,
+          });
+          memory[activePersona].push({
+            role: "assistant",
+            content: partyResult.report,
+          });
+        }
+      } catch (err: any) {
+        partySpinner.stop();
+        console.log(chalk.red(`\n✖ Party Mode execution failed: ${err.message}\n`));
+      } finally {
+        rl.resume();
       }
       continue;
     }

@@ -100,6 +100,7 @@ describe("Modern UI / UX Suite", () => {
         "/persona",
         "/provider",
         "/paste",
+        "/party",
       ]);
     });
 

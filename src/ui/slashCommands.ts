@@ -81,6 +81,11 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: "Automatically execute fixes for issues identified in the latest audit",
   },
   {
+    command: "/party",
+    syntax: "/party [audit|review|brainstorm|<custom-task>]",
+    description: "Orchestrate all 4 personas simultaneously under ELI's coordination (Token Intensive)",
+  },
+  {
     command: "/exit",
     syntax: "/exit",
     description: "Exit the application",
@@ -105,6 +110,27 @@ export const FIX_SUBCOMMANDS: SuggestionItem[] = [
     label: "all",
     command: "all",
     description: "Execute fixes for all identified issues sequentially",
+  },
+];
+
+export const PARTY_SUBCOMMANDS: SuggestionItem[] = [
+  {
+    value: "audit",
+    label: "audit",
+    command: "audit",
+    description: "Full Quartet audit (Security, Architecture, Creativity, Synthesis)",
+  },
+  {
+    value: "review",
+    label: "review",
+    command: "review",
+    description: "Comprehensive code review across all 4 perspectives",
+  },
+  {
+    value: "brainstorm",
+    label: "brainstorm",
+    command: "brainstorm",
+    description: "Brainstorm architecture, features, and risk analysis",
   },
 ];
 
@@ -388,6 +414,7 @@ const ALL_COMMAND_NAMES = new Set([
   "/undo",
   "/session",
   "/fix",
+  "/party",
   "/paste",
   "/retry",
   "/clear",
@@ -451,6 +478,18 @@ export function getContextualSuggestions(
       ? FIX_SUBCOMMANDS.filter((f) => f.value.toLowerCase().startsWith(query))
       : [...FIX_SUBCOMMANDS];
     return { title: "Fix Target", items };
+  }
+
+  // Level 2: /party [audit|review|brainstorm|<custom-task>]
+  if (baseCmd === "/party") {
+    if (parts.length > 2 || (parts.length === 2 && endsWithSpace)) {
+      return { title: "Party Task", items: [] };
+    }
+    const query = parts.length === 2 && !endsWithSpace ? parts[1].toLowerCase() : "";
+    const items = query
+      ? PARTY_SUBCOMMANDS.filter((p) => p.value.toLowerCase().startsWith(query))
+      : [...PARTY_SUBCOMMANDS];
+    return { title: "Party Task", items };
   }
 
   // Level 2 & 3: /setting [memory|steps|voice|show]
