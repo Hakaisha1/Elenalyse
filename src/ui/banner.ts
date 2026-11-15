@@ -57,7 +57,7 @@ export function renderWelcomeBanner(options: BannerOptions): string {
     return text + " ".repeat(spaceCount);
   };
 
-  const titleRaw = "ELENALYSE  v1.0.0";
+  const titleRaw = "ELENALYSE  v1.0.1";
   const titlePadSpaces = Math.max(
     0,
     Math.floor((width - 2 - titleRaw.length) / 2)

@@ -11,7 +11,7 @@ const program = new Command();
 program
   .name("elenalyse")
   .description("Interactive CLI personal developer assistant")
-  .version("0.1.0");
+  .version("1.0.1");
 
 program
   .command("start")
