@@ -2,6 +2,15 @@
 
 Semua perubahan dan peningkatan signifikan pada Elenalyse (mulai dari pematangan core system, stabilitas mode *agentic*, hingga peningkatan UX).
 
+## [1.0.2] - Bugfix Release (Dropdown Stacking & Voice Tag Leaks)
+
+### Bug Fixes
+- **Fix Dropdown Stacking di Terminal**: Menghilangkan escape code `\x1b[s` dan `\x1b[u` yang menyebabkan dropdown autocomplete menumpuk (stacking) pada terminal Windows saat terjadi scrolling. Digantikan dengan kontrol kursor ECMA-48 `\x1b[<n>A` dan pembersihan layar instan `\r\x1b[J`.
+- **Auto-Dismissal Autocomplete**: Kotak saran kini otomatis menutup saat slash command yang diketik sudah cocok persis (misal `/party`), saat input tidak cocok dengan perintah apa pun, atau saat mengetik chat normal.
+- **Natural Enter Key Execution**: Menekan tombol `Enter` saat mengetik perintah langsung mengeksekusi perintah tanpa terperangkap loop autocomplete. Tombol `Tab` tetap didedikasikan untuk memilih saran.
+- **Sanitasi Tag `<voice>`**: Memperbaiki kebocoran tag `<voice>` ke output terminal dengan mem-passing `displayText` hasil sanitasi ke markdown renderer, memperluas regex pembersihan tag suara agar kebal terhadap huruf besar/kecil (`<Voice>`), berbagai format tanda kutip, tag tanpa penutup, dan tag penutup liar.
+- **Defense-in-Depth Markdown Renderer**: Menambahkan filter pelindung di dalam `renderMarkdown` untuk memastikan teks output selalu bersih dari tag internal TTS.
+
 ## [1.0.1] - Perbaikan Core & Pematangan Sistem
 
 ### ✨ Fitur Baru & Peningkatan (Features)
