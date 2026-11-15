@@ -15,43 +15,43 @@
 
 ---
 
-## 🌟 Overview
+## Overview
 
-**Elenalyse** is an interactive, agentic developer assistant designed for the terminal. Built on top of the Vercel AI SDK, Elenalyse combines deep codebase auditing, multi-step autonomous tool execution, and visual diff previews with the charm and distinct analytical strengths of the **Persona Quartet**.
+**Elenalyse** is an interactive, agentic developer assistant designed for the terminal. Built on top of the Vercel AI SDK, Elenalyse combines deep codebase auditing, multi-step autonomous tool execution, and visual diff previews with the distinct analytical strengths of the **Persona Quartet**.
 
 Whether you need a relentless security audit from **RIN**, cold architecture refactoring from **REI**, enthusiastic feature ideation from **SORA**, or patient mentorship and synthesis from **ELI**, Elenalyse adapts to your workflow.
 
 ---
 
-## ✨ Core Features in v1.0
+## Core Features in v1.0
 
-* **🎭 The Persona Quartet & Isolated Memory Handoff**: Four archetypes (ELI, REI, SORA, RIN) with isolated conversation memories. Switching personas automatically preserves technical context without personality bleed.
-* **🎉 Simultaneous Party Mode (`/party`)**: Orchestrates all four personas simultaneously under ELI's leadership. RIN, REI, and SORA inspect your codebase in parallel, and ELI synthesizes their findings into a prioritized, empathetic roadmap.
-* **⚡ Autonomous Multi-Step Analysis**: Analyzes, audits, and navigates large codebases across up to 25 autonomous steps with real-time spinners and text-based tool call fallback.
-* **🔍 Visual Unified Diff Preview**: Calculates line-level diffs and renders clean boxed previews (`+ green`, `- red`, `@@ hunk`) before any file write or edit is confirmed.
-* **🛡️ Developer Safety & Control (`/undo`)**: Automatic pre-modification snapshots allow instant reversal of any file write or edit via `/undo`.
-* **🔧 Actionable Remediation (`/fix`)**: Formulates and executes targeted code fixes (`/fix blockers`, `/fix majors`, `/fix all`) based on prior audit findings.
-* **⌨️ Interactive Slash Autocomplete Dropdown**: Smooth terminal dropdown popup with arrow-key navigation (`↑/↓`), multi-level sub-command drilldowns, Tab/Enter selection, and non-intrusive auto-dismissal.
-* **⚙️ Persistent In-Chat Settings (`/setting`)**: Configure memory context limits (`amnesia`, `default`, `focus`), maximum autonomous inspection steps, and voice toggle directly within the REPL.
-* **💾 Session Persistence (`/session`)**: Save, load, and list isolated conversation sessions stored in `~/.elenalyse/sessions/`.
-* **📑 Terminal Markdown & Syntax Highlighting**: Custom pure-TypeScript ANSI renderer for headers, bold/italic, inline code, and boxed code containers with syntax highlighting (TypeScript, Python, SQL, Diff, JSON, Shell).
-* **🔄 Multi-Provider Resilience & Failover**: Built-in support for Google Gemini, OpenAI, OpenRouter, and Ollama with automatic rate-limit and server failover.
-* **🗣️ Expressive Japanese TTS Audio Cues**: Optional voice feedback powered by the local [VOICEVOX](https://voicevox.hiroshiba.jp/) engine.
+* **The Persona Quartet & Isolated Memory Handoff**: Four archetypes (ELI, REI, SORA, RIN) with isolated conversation memories. Switching personas automatically preserves technical context without personality bleed.
+* **Simultaneous Party Mode (`/party`)**: Orchestrates all four personas simultaneously under ELI's leadership. RIN, REI, and SORA inspect your codebase in parallel, and ELI synthesizes their findings into a prioritized, actionable roadmap.
+* **Autonomous Multi-Step Analysis**: Analyzes, audits, and navigates large codebases across up to 25 autonomous steps with real-time status spinners and text-based tool call fallback.
+* **Visual Unified Diff Preview**: Calculates line-level diffs and renders clean boxed previews (`+ green`, `- red`, `@@ hunk`) before any file write or edit is confirmed.
+* **Developer Safety & Rollback (`/undo`)**: Automatic pre-modification snapshots allow instant reversal of any file write or edit via `/undo`.
+* **Actionable Remediation (`/fix`)**: Formulates and executes targeted code fixes (`/fix blockers`, `/fix majors`, `/fix all`) based on prior audit findings.
+* **Interactive Slash Autocomplete Dropdown**: Terminal dropdown popup with arrow-key navigation (`↑/↓`), multi-level sub-command drilldowns, Tab/Enter selection, and non-intrusive auto-dismissal.
+* **Persistent In-Chat Settings (`/setting`)**: Configure memory context limits (`amnesia`, `default`, `focus`), maximum autonomous inspection steps, and voice toggle directly within the REPL.
+* **Session Persistence (`/session`)**: Save, load, and list isolated conversation sessions stored in `~/.elenalyse/sessions/`.
+* **Terminal Markdown & Syntax Highlighting**: Custom pure-TypeScript ANSI renderer for headers, bold/italic, inline code, and boxed code containers with syntax highlighting (TypeScript, Python, SQL, Diff, JSON, Shell).
+* **Multi-Provider Resilience & Failover**: Built-in support for Google Gemini, OpenAI, OpenRouter, and Ollama with automatic rate-limit and server failover.
+* **Expressive Japanese TTS Audio Cues**: Optional voice feedback powered by the local [VOICEVOX](https://voicevox.hiroshiba.jp/) engine.
 
 ---
 
-## 🎭 The Persona Quartet
+## The Persona Quartet
 
 | Persona | Archetype | Tone & Personality | Analytical Focus |
 | :--- | :--- | :--- | :--- |
-| **🌱 ELI** | **Warm Mentor** | Friendly, patient, empathetic, supportive | Onboarding, architecture explanation, ELI5 breakdowns, Party leader |
-| **❄️ REI** | **Kuudere** | Cold, concise, highly efficient, objective | Code refactoring, performance optimization, structural complexity |
-| **☀️ SORA** | **Deredere** | Cheerful, energetic, creative, inspiring | Brainstorming, user experience, developer delight, new features |
-| **🔥 RIN** | **Tsundere** | Strict, merciless, sharp-tongued, thorough | Security auditing, bug detection, input validation, critical blockers |
+| **ELI** | **Warm Mentor** | Friendly, patient, empathetic, supportive | Onboarding, architecture explanation, ELI5 breakdowns, Party leader |
+| **REI** | **Kuudere** | Cold, concise, highly efficient, objective | Code refactoring, performance optimization, structural complexity |
+| **SORA** | **Deredere** | Cheerful, energetic, creative, inspiring | Brainstorming, user experience, developer delight, new features |
+| **RIN** | **Tsundere** | Strict, merciless, sharp-tongued, thorough | Security auditing, bug detection, input validation, critical blockers |
 
 ---
 
-## 🚀 Installation
+## Installation
 
 Install Elenalyse globally using npm:
 
@@ -67,7 +67,7 @@ npx elenalyse start
 
 ---
 
-## ⚡ Quick Start
+## Quick Start
 
 ### 1. Interactive REPL Mode (Recommended)
 
@@ -104,7 +104,7 @@ elenalyse persona set rei
 
 ---
 
-## 💬 In-Chat Slash Commands Reference
+## In-Chat Slash Commands Reference
 
 | Command | Syntax | Description |
 | :--- | :--- | :--- |
@@ -125,7 +125,7 @@ elenalyse persona set rei
 
 ---
 
-## 🗣️ Voice Engine & Attribution
+## Voice Engine & Attribution
 
 Elenalyse supports local Japanese speech synthesis using the **[VOICEVOX](https://voicevox.hiroshiba.jp/)** engine.
 
@@ -145,16 +145,16 @@ Please review the [VOICEVOX Terms of Use](https://voicevox.hiroshiba.jp/term/) b
 
 ---
 
-## 🔮 Upcoming in v1.1+ (Roadmap)
+## Upcoming in v1.1+ (Roadmap)
 
 Version 1.0 focuses on delivering a hardened, rock-solid, developer-first terminal core. The following graphical extensions are actively developed and slated for upcoming releases:
 
-* **🖥️ 3D Live Desktop Mascot (`elenalyse live`)**: A transparent, borderless desktop overlay powered by Tauri + Three.js displaying an expressive 3D VRM persona hovering alongside your IDE with real-time lip-sync audio cues.
-* **🌐 Repository 3D Graph Visualization (`elenalyse viz`)**: An interactive 3D force-directed module graph visualizing file imports, dependencies, and architectural coupling directly in your browser.
+* **3D Live Desktop Mascot (`elenalyse live`)**: A transparent, borderless desktop overlay powered by Tauri + Three.js displaying an expressive 3D VRM persona hovering alongside your IDE with real-time lip-sync audio cues.
+* **Repository 3D Graph Visualization (`elenalyse viz`)**: An interactive 3D force-directed module graph visualizing file imports, dependencies, and architectural coupling directly in your browser.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 * **CLI Core**: Node.js, TypeScript, Commander, Chalk, Ora.
 * **Agentic Engine**: Vercel AI SDK (`ai`), Zod.
@@ -164,6 +164,6 @@ Version 1.0 focuses on delivering a hardened, rock-solid, developer-first termin
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the [MIT License](LICENSE).
