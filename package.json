@@ -10,7 +10,8 @@
   "files": [
     "dist",
     "bin",
-    "defaults"
+    "defaults",
+    "skills"
   ],
   "scripts": {
     "build": "tsc",
