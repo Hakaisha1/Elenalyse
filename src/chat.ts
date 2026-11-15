@@ -93,20 +93,65 @@ export interface VoiceSegment {
   emotion?: string;
 }
 
-function extractVoiceSegments(responseText: string, debug: boolean = false): { displayText: string; voiceLines: VoiceSegment[] } {
+export function extractVoiceSegments(
+  responseText: string,
+  debug: boolean = false
+): { displayText: string; voiceLines: VoiceSegment[] } {
   if (!responseText) return { displayText: "", voiceLines: [] };
   const voiceLines: VoiceSegment[] = [];
-  
-  // Match <voice> or <voice emotion="sad">
-  const displayText = responseText.replace(/<voice(?:\s+emotion="([^"]+)")?>([\s\S]*?)<\/voice>/g, (_, emotion, content) => {
-    voiceLines.push({ text: content.trim(), emotion });
-    return debug ? chalk.magenta(`\n[VOICE${emotion ? ` (${emotion})` : ''}: ${content.trim()}]\n`) : "";
+
+  // Match <voice ...>content</voice> (case-insensitive, flexible attributes)
+  const voiceBlockRegex = /<voice(?:\s+[^>]*?)?>([\s\S]*?)<\/voice>/gi;
+
+  let displayText = responseText.replace(voiceBlockRegex, (match, content) => {
+    const emotionMatch = match.match(/emotion=["']?([^"'\s>]+)["']?/i);
+    const emotion = emotionMatch ? emotionMatch[1] : undefined;
+    const cleanContent = content.trim();
+
+    if (cleanContent) {
+      voiceLines.push({ text: cleanContent, emotion });
+    }
+
+    if (debug && cleanContent) {
+      return chalk.magenta(`\n[VOICE${emotion ? ` (${emotion})` : ""}: ${cleanContent}]\n`);
+    }
+    return "";
   });
-  return { displayText: displayText.trim(), voiceLines };
+
+  // Handle unclosed <voice ...> at end of string
+  const unclosedVoiceRegex = /<voice(?:\s+[^>]*?)?>([\s\S]*)$/gi;
+  displayText = displayText.replace(unclosedVoiceRegex, (match, content) => {
+    const emotionMatch = match.match(/emotion=["']?([^"'\s>]+)["']?/i);
+    const emotion = emotionMatch ? emotionMatch[1] : undefined;
+    const cleanContent = content.trim();
+
+    if (cleanContent) {
+      voiceLines.push({ text: cleanContent, emotion });
+    }
+
+    if (debug && cleanContent) {
+      return chalk.magenta(`\n[VOICE${emotion ? ` (${emotion})` : ""}: ${cleanContent}]\n`);
+    }
+    return "";
+  });
+
+  // Clean up any remaining stray tags like </voice> or self-closing <voice .../>
+  displayText = displayText
+    .replace(/<\/?voice(?:\s+[^>]*?)?\/?>/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return { displayText, voiceLines };
 }
 
-function stripVoiceTags(text: string): string {
-  return text.replace(/<voice(?:\s+emotion="([^"]+)")?>[\s\S]*?<\/voice>/g, "").trim();
+export function stripVoiceTags(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/<voice(?:\s+[^>]*?)?>[\s\S]*?<\/voice>/gi, "")
+    .replace(/<voice(?:\s+[^>]*?)?>[\s\S]*$/gi, "")
+    .replace(/<\/?voice(?:\s+[^>]*?)?\/?>/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function sanitizeForMemory(messages: any[]): any[] {
@@ -355,16 +400,15 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
           spinner.stop();
         }
 
-        console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}):\n`) + renderMarkdown(finalText, activePersona));
+        const { displayText, voiceLines } = extractVoiceSegments(finalText, debug);
+
+        console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}):\n`) + renderMarkdown(displayText, activePersona));
         console.log(chalk.gray(`\n[Token Usage: ${totalPromptTokens} input / ${totalCompletionTokens} output]`));
 
-        if (voiceEnabled) {
+        if (voiceEnabled && voiceLines.length > 0) {
           await startBridgeServer();
-          let { displayText, voiceLines } = extractVoiceSegments(finalText, debug);
-          if (voiceLines.length > 0) {
-            const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
-            await playVoiceLines(voiceLines, speakerId);
-          }
+          const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
+          await playVoiceLines(voiceLines, speakerId);
         }
         break; // Successfully finished
       } catch (innerError: any) {
@@ -1146,14 +1190,14 @@ export async function startInteractiveChat(
             });
           }
 
-          if (finalText) {
-            console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}):\n`) + renderMarkdown(finalText, activePersona));
+          const { displayText, voiceLines } = extractVoiceSegments(finalText, debug);
+
+          if (displayText) {
+            console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}):\n`) + renderMarkdown(displayText, activePersona));
           }
 
           // Save to memory
           memory[activePersona] = sanitizeForMemory(currentMessages);
-
-          let { displayText, voiceLines } = extractVoiceSegments(finalText, debug);
           console.log(chalk.gray(`[Token Usage: ${totalPromptTokens} input / ${totalCompletionTokens} output]`));
 
           if (debug) {

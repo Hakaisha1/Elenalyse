@@ -151,11 +151,18 @@ export function renderCodeBlock(code: string, lang: string): string {
 export function renderMarkdown(text: string, persona?: string): string {
   if (!text) return "";
 
+  // Defensively strip any lingering voice tags before rendering
+  const cleanedText = text
+    .replace(/<voice(?:\s+[^>]*?)?>[\s\S]*?<\/voice>/gi, "")
+    .replace(/<voice(?:\s+[^>]*?)?>[\s\S]*$/gi, "")
+    .replace(/<\/?voice(?:\s+[^>]*?)?\/?>/gi, "")
+    .replace(/\n{3,}/g, "\n\n");
+
   // Step 1: Extract fenced code blocks to prevent markdown parsing inside them
   const codeBlocks: { placeholder: string; rendered: string }[] = [];
   let blockIndex = 0;
 
-  let processed = text.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/g, (_match, lang, code) => {
+  let processed = cleanedText.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/g, (_match, lang, code) => {
     const ph = `\u0002CODEBLOCK_${blockIndex++}\u0002`;
     codeBlocks.push({
       placeholder: ph,

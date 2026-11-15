@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderMarkdown, highlightSyntax, renderCodeBlock } from "../src/ui/markdown.js";
+import { extractVoiceSegments, stripVoiceTags } from "../src/chat.js";
 
 describe("Terminal Markdown & Syntax Highlighting Engine", () => {
   describe("Inline & Block Markdown Rendering", () => {
@@ -115,6 +116,61 @@ describe("Terminal Markdown & Syntax Highlighting Engine", () => {
       expect(highlighted).toContain("- old line");
       expect(highlighted).toContain("+ new line");
       expect(highlighted).toContain("@@ -1,3 +1,3 @@");
+    });
+  });
+
+  describe("Voice Tag Sanitization Defense", () => {
+    it("strips standard <voice> tags from markdown rendering", () => {
+      const raw = "<voice>こんにちは！</voice>\nHere is the answer to your question.";
+      const rendered = renderMarkdown(raw);
+      expect(rendered).not.toContain("<voice>");
+      expect(rendered).not.toContain("</voice>");
+      expect(rendered).not.toContain("こんにちは！");
+      expect(rendered).toContain("Here is the answer to your question.");
+    });
+
+    it("strips <voice> tags with emotion attributes and single/double quotes", () => {
+      const raw = "<voice emotion=\"happy\">やったー！</voice>\nGood job on the fix!\n<voice emotion='sad'>でも疲れた...</voice>";
+      const rendered = renderMarkdown(raw);
+      expect(rendered).not.toContain("<voice");
+      expect(rendered).not.toContain("</voice>");
+      expect(rendered).not.toContain("やったー！");
+      expect(rendered).not.toContain("でも疲れた...");
+      expect(rendered).toContain("Good job on the fix!");
+    });
+
+    it("strips unclosed and stray voice tags defensively", () => {
+      const raw1 = "Some explanation before.\n<voice emotion=\"cheerful\">未完了のボイス";
+      const rendered1 = renderMarkdown(raw1);
+      expect(rendered1).not.toContain("<voice");
+      expect(rendered1).toContain("Some explanation before.");
+
+      const raw2 = "Explanation with stray closing tag.</voice>";
+      const rendered2 = renderMarkdown(raw2);
+      expect(rendered2).not.toContain("</voice>");
+      expect(rendered2).toContain("Explanation with stray closing tag.");
+    });
+
+    it("extracts voice segments correctly for TTS while keeping displayText completely clean", () => {
+      const input = "Hello developer!\n<voice emotion=\"cheerful\">任せてください！</voice>\nHere is the plan.";
+      const { displayText, voiceLines } = extractVoiceSegments(input);
+
+      expect(voiceLines).toEqual([
+        { text: "任せてください！", emotion: "cheerful" }
+      ]);
+      expect(displayText).not.toContain("<voice");
+      expect(displayText).not.toContain("</voice>");
+      expect(displayText).not.toContain("任せてください！");
+      expect(displayText).toContain("Hello developer!");
+      expect(displayText).toContain("Here is the plan.");
+    });
+
+    it("stripVoiceTags removes all variations of voice tags", () => {
+      expect(stripVoiceTags("<voice>テスト</voice>")).toBe("");
+      expect(stripVoiceTags("<Voice emotion=\"tsundere\">別に嬉しくないし！</Voice>")).toBe("");
+      expect(stripVoiceTags("<voice emotion='sad'>しくしく</voice>")).toBe("");
+      expect(stripVoiceTags("<voice>未完了")).toBe("");
+      expect(stripVoiceTags("prefix <voice>tag</voice> suffix")).toBe("prefix  suffix");
     });
   });
 });
