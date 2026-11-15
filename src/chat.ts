@@ -19,7 +19,8 @@ import { saveSession, loadSession, listSessions } from "./session.js";
 import { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox } from "./ui/banner.js";
 import { interactivePrompt } from "./ui/prompt.js";
 import { renderMarkdown } from "./ui/markdown.js";
-export { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox, interactivePrompt, renderMarkdown };
+import { pruneMemoryToolResults } from "./memoryPruner.js";
+export { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox, interactivePrompt, renderMarkdown, pruneMemoryToolResults };
 import { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall } from "./toolParser.js";
 export { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall };
 
@@ -915,7 +916,7 @@ export async function startInteractiveChat(
             )
           };
 
-          const currentMessages: any[] = [...memory[activePersona]];
+          const currentMessages: any[] = [...pruneMemoryToolResults(memory[activePersona])];
           let previousToolCallsStr = "";
           let finalText = "";
           let totalPromptTokens = 0;
