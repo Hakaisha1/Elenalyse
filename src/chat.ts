@@ -18,7 +18,8 @@ import { undoLastChange } from "./undo.js";
 import { saveSession, loadSession, listSessions } from "./session.js";
 import { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox } from "./ui/banner.js";
 import { interactivePrompt } from "./ui/prompt.js";
-export { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox, interactivePrompt };
+import { renderMarkdown } from "./ui/markdown.js";
+export { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox, interactivePrompt, renderMarkdown };
 import { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall } from "./toolParser.js";
 export { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall };
 
@@ -347,7 +348,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
           spinner.stop();
         }
 
-        console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}): `) + finalText);
+        console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}):\n`) + renderMarkdown(finalText, activePersona));
         console.log(chalk.gray(`\n[Token Usage: ${totalPromptTokens} input / ${totalCompletionTokens} output]`));
 
         if (voiceEnabled) {
@@ -1080,7 +1081,7 @@ export async function startInteractiveChat(
           }
 
           if (finalText) {
-            console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}): `) + finalText);
+            console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}):\n`) + renderMarkdown(finalText, activePersona));
           }
 
           // Save to memory

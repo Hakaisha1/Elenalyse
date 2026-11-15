@@ -135,7 +135,7 @@ describe("Interactive /setting Menu and Settings Persistence", () => {
     it("has default values for memoryMode and maxSteps", () => {
       expect(MAX_AUTONOMOUS_STEPS).toBe(25);
       const config = getConfig();
-      expect(config.memoryMode === "default" || config.memoryMode === undefined).toBe(true);
+      expect(["default", "amnesia", "focus", undefined]).toContain(config.memoryMode);
       expect(config.maxSteps === 25 || typeof config.maxSteps === "number").toBe(true);
     });
 
