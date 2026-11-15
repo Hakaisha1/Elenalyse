@@ -7,6 +7,8 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import chalk from "chalk";
 import { recordSnapshot } from "./undo.js";
+import { generateUnifiedDiff, renderNewFilePreview } from "./ui/diff.js";
+export { generateUnifiedDiff, renderNewFilePreview };
 
 const execAsync = promisify(exec);
 
@@ -383,16 +385,23 @@ export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner:
     // Check if file already exists to warn user
     let fileExists = false;
     let existingSize = 0;
+    let existingContent = "";
     try {
       const stat = await fs.stat(absolutePath);
       fileExists = true;
       existingSize = stat.size;
+      existingContent = await fs.readFile(absolutePath, "utf-8");
     } catch {}
 
     onPauseSpinner();
     let answer = "n";
     try {
       console.log(""); 
+      if (fileExists) {
+        console.log(generateUnifiedDiff(filePath, existingContent, content));
+      } else {
+        console.log(renderNewFilePreview(filePath, content, 15));
+      }
       const action = fileExists ? "OVERWRITE" : "CREATE";
       const sizeInfo = fileExists 
         ? ` (existing: ${(existingSize / 1024).toFixed(1)}KB → new: ${(Buffer.byteLength(content) / 1024).toFixed(1)}KB)`
@@ -537,6 +546,13 @@ export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: 
     let answer = "n";
     try {
       console.log(""); 
+      try {
+        const currentContent = await fs.readFile(absolutePath, "utf-8");
+        const editCheck = applyFileEdit(currentContent, targetText, replacementText);
+        if (editCheck.success && editCheck.newContent !== undefined) {
+          console.log(generateUnifiedDiff(filePath, currentContent, editCheck.newContent));
+        }
+      } catch {}
       const promptText = chalk.yellow(`⚠️  Elenalyse is requesting to EDIT file: ${chalk.bold(filePath)}\nAllow execution? [Y/n]: `);
       if (rlInterface) {
         rlInterface.resume();
