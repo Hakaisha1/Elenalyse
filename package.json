@@ -15,6 +15,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build && npm run test",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest run"
@@ -29,7 +30,7 @@
     "ai",
     "rag"
   ],
-  "author": "",
+  "author": "Hakaisha1 <ixforce4@gmail.com>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/Hakaisha1/Elenalyse/issues"

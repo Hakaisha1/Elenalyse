@@ -242,7 +242,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
           if (genResult.toolCalls && genResult.toolCalls.length > 0) {
             const tc = genResult.toolCalls[0];
             const argsSummary = formatToolArgs((tc as any).args || {});
-            spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
+            spinner.text = `${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
 
             if (genResult.response && genResult.response.messages) {
               currentMessages.push(...genResult.response.messages);
@@ -271,7 +271,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
               previousToolCallsStr = toolCallSig;
 
               const argsSummary = formatToolArgs(tc.args);
-              spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
+              spinner.text = `${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
 
               const toolOutput = await executeToolDirectly(tc.toolName, tc.args, toolsMap);
               combinedToolOutputs += `[System Tool Result for "${tc.toolName}"]:\n${toolOutput}\n\n`;
@@ -584,13 +584,13 @@ export async function startInteractiveChat(
   let lastUserPrompt = "";
 
   while (true) {
-    const input = await interactivePrompt(chalk.green("👤 You ❯ "), {
+    const input = await interactivePrompt(chalk.green("You ❯ "), {
       personaColor: getPersonaColor(activePersona),
     });
     if (!input.trim()) continue;
 
     if (input.startsWith("/exit")) {
-      console.log(chalk.gray("Goodbye! 👋"));
+      console.log(chalk.gray("Goodbye!"));
       break;
     }
 
@@ -837,14 +837,14 @@ export async function startInteractiveChat(
       const taskArg = input.slice(6).trim() || "Full Quartet audit (Security, Architecture, Creativity, Synthesis)";
 
       console.log("\n" + renderTokenWarningBox() + "\n");
-      const answer = await rl.question(chalk.yellow("⚠️  Do you want to proceed with Party Mode orchestration? [Y/n]: "));
+      const answer = await rl.question(chalk.yellow("[!] Do you want to proceed with Party Mode orchestration? [Y/n]: "));
       if (answer.trim().toLowerCase() !== "y" && answer.trim() !== "") {
         console.log(chalk.yellow("[ℹ] Party Mode cancelled by user.\n"));
         continue;
       }
 
       rl.pause();
-      const partySpinner = ora("✨ Party Mode: RIN, REI, and SORA analyzing simultaneously under ELI...").start();
+      const partySpinner = ora("Party Mode: RIN, REI, and SORA analyzing simultaneously under ELI...").start();
 
       try {
         const aiModel = await getAiClient(provider, model, config);
@@ -852,7 +852,7 @@ export async function startInteractiveChat(
           task: taskArg,
           aiClientFactory: aiModel,
           onProgress: (status) => {
-            partySpinner.text = `✨ ${status}`;
+            partySpinner.text = `[Party] ${status}`;
           },
         });
 
@@ -886,7 +886,7 @@ export async function startInteractiveChat(
     let finalInput = input;
 
     if (input.trim() === "/paste") {
-      console.log(chalk.cyan("\n📋 Entering Multi-line Paste Mode."));
+      console.log(chalk.cyan("\nEntering Multi-line Paste Mode."));
       console.log(chalk.gray("Paste your text below. Type 'END' on a new line to submit, or 'CANCEL' to abort.\n"));
       const pasteLines: string[] = [];
       while (true) {
@@ -1018,7 +1018,7 @@ export async function startInteractiveChat(
 
               const tc = genResult.toolCalls[0];
               const argsSummary = formatToolArgs((tc as any).args || {});
-              spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
+              spinner.text = `${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
 
               if (genResult.response && genResult.response.messages) {
                 currentMessages.push(...genResult.response.messages);
@@ -1047,7 +1047,7 @@ export async function startInteractiveChat(
                 previousToolCallsStr = toolCallSig;
 
                 const argsSummary = formatToolArgs(tc.args);
-                spinner.text = `${colorFn("⚡")} ${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
+                spinner.text = `${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
 
                 const filePath = tc.args?.filePath || tc.args?.dirPath;
                 if (filePath && typeof filePath === "string") {
@@ -1147,7 +1147,7 @@ export async function startInteractiveChat(
           }
 
           if (finalText) {
-            console.log(colorFn(`🧊 Elenalyse (${activePersona.toUpperCase()}):\n`) + renderMarkdown(finalText, activePersona));
+            console.log(colorFn(`Elenalyse (${activePersona.toUpperCase()}):\n`) + renderMarkdown(finalText, activePersona));
           }
 
           // Save to memory
@@ -1189,7 +1189,7 @@ export async function startInteractiveChat(
     } catch (error: any) {
       spinner.stop();
       if (isAborted || abortController.signal.aborted || error.name === "AbortError" || error.message?.includes("aborted")) {
-        console.log(chalk.yellow("\n⚠️ Generation aborted by user."));
+        console.log(chalk.yellow("\n[!] Generation aborted by user."));
       } else {
         console.log(chalk.red("\n✖ Failed to get response from AI engine."));
         console.log(chalk.red(error.message));

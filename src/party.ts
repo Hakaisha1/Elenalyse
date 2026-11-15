@@ -8,7 +8,7 @@ import { getPartyPersonaPrompt, getProjectContext, Persona } from "./personas.js
  */
 
 export function renderTokenWarningBox(): string {
-  const title = "⚠️  TOKEN INTENSIVE NOTICE";
+  const title = "TOKEN INTENSIVE NOTICE";
   const lines = [
     "Party Mode orchestrates all 4 personas (ELI, REI, SORA, RIN)",
     "simultaneously. This will consume higher API token quota",
@@ -35,19 +35,19 @@ export function formatQuartetReport(
   soraIdeation: string
 ): string {
   return [
-    "# ✨ ELENALYSE QUARTET REPORT (Party Mode)",
+    "# ELENALYSE QUARTET REPORT (Party Mode)",
     "**Coordinated by ELI (Warm Mentor)**",
     "",
-    "### 🔥 RIN's Security & Vulnerability Audit",
+    "### RIN: Security & Vulnerability Audit",
     rinAudit.trim(),
     "",
-    "### ❄️ REI's Architecture & Performance Optimization",
+    "### REI: Architecture & Performance Optimization",
     reiAnalysis.trim(),
     "",
-    "### ☀️ SORA's Creative & Feature Enhancements",
+    "### SORA: Creative & Feature Enhancements",
     soraIdeation.trim(),
     "",
-    "### 🌱 ELI's Synthesis & Actionable Next Steps",
+    "### ELI: Synthesis & Actionable Next Steps",
     eliSynthesis.trim(),
   ].join("\n");
 }

@@ -139,25 +139,25 @@ export const PERSONA_SUBCOMMANDS: SuggestionItem[] = [
     value: "eli",
     label: "eli",
     command: "eli",
-    description: "🌱 Warm Mentor (Onboarding, friendly concept breakdowns, ELI5)",
+    description: "Warm Mentor (Onboarding, friendly concept breakdowns, ELI5)",
   },
   {
     value: "rei",
     label: "rei",
     command: "rei",
-    description: "❄️ Kuudere Architect (Refactoring, performance optimization, architecture)",
+    description: "Kuudere Architect (Refactoring, performance optimization, architecture)",
   },
   {
     value: "sora",
     label: "sora",
     command: "sora",
-    description: "☀️ Deredere Creative (Brainstorming, exploration, new feature concepts)",
+    description: "Deredere Creative (Brainstorming, exploration, new feature concepts)",
   },
   {
     value: "rin",
     label: "rin",
     command: "rin",
-    description: "🔥 Tsundere Auditor (Strict security checks, error & bug detection)",
+    description: "Tsundere Auditor (Strict security checks, error & bug detection)",
   },
 ];
 

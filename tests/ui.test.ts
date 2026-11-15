@@ -32,7 +32,7 @@ describe("Modern UI / UX Suite", () => {
       expect(banner).toContain("╭");
       expect(banner).toContain("╰");
       expect(banner).toContain("│");
-      expect(banner).toContain("E L E N A L Y S E");
+      expect(banner).toContain("ELENALYSE  v1.0.0");
     });
 
     it("displays persona badge and archetype information for each persona", () => {

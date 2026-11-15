@@ -59,7 +59,7 @@ export function renderDropdownLines(
 }
 
 export async function interactivePrompt(
-  promptPrefix: string = chalk.green("👤 You ❯ "),
+  promptPrefix: string = chalk.green("You ❯ "),
   _options?: PromptOptions
 ): Promise<string> {
   if (!process.stdin.isTTY) {

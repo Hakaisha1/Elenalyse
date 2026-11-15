@@ -329,7 +329,7 @@ export const createRunCommandTool = (onPauseSpinner: () => void, onResumeSpinner
     let answer = "n";
     try {
       console.log(""); // Newline for clean output
-      const promptText = chalk.yellow(`⚠️  Elenalyse is requesting to run command:\n> ${chalk.bold(command)}\nAllow execution? [Y/n]: `);
+      const promptText = chalk.yellow(`[!] Elenalyse is requesting to run command:\n> ${chalk.bold(command)}\nAllow execution? [Y/n]: `);
       if (rlInterface) {
         rlInterface.resume();
         answer = await rlInterface.question(promptText);
@@ -406,7 +406,7 @@ export const createWriteFileTool = (onPauseSpinner: () => void, onResumeSpinner:
       const sizeInfo = fileExists 
         ? ` (existing: ${(existingSize / 1024).toFixed(1)}KB → new: ${(Buffer.byteLength(content) / 1024).toFixed(1)}KB)`
         : ` (${(Buffer.byteLength(content) / 1024).toFixed(1)}KB)`;
-      const promptText = chalk.yellow(`⚠️  Elenalyse is requesting to ${chalk.bold(action)} file: ${chalk.bold(filePath)}${sizeInfo}\nAllow execution? [Y/n]: `);
+      const promptText = chalk.yellow(`[!] Elenalyse is requesting to ${chalk.bold(action)} file: ${chalk.bold(filePath)}${sizeInfo}\nAllow execution? [Y/n]: `);
       if (rlInterface) {
         rlInterface.resume();
         answer = await rlInterface.question(promptText);
@@ -553,7 +553,7 @@ export const createEditFileTool = (onPauseSpinner: () => void, onResumeSpinner: 
           console.log(generateUnifiedDiff(filePath, currentContent, editCheck.newContent));
         }
       } catch {}
-      const promptText = chalk.yellow(`⚠️  Elenalyse is requesting to EDIT file: ${chalk.bold(filePath)}\nAllow execution? [Y/n]: `);
+      const promptText = chalk.yellow(`[!] Elenalyse is requesting to EDIT file: ${chalk.bold(filePath)}\nAllow execution? [Y/n]: `);
       if (rlInterface) {
         rlInterface.resume();
         answer = await rlInterface.question(promptText);

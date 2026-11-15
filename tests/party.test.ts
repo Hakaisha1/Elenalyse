@@ -77,15 +77,15 @@ describe("Party Mode - Persona Quartet Simultaneous Orchestration Suite", () => 
 
       const report = formatQuartetReport(eli, rin, rei, sora);
 
-      expect(report).toContain("# ✨ ELENALYSE QUARTET REPORT (Party Mode)");
+      expect(report).toContain("# ELENALYSE QUARTET REPORT (Party Mode)");
       expect(report).toContain("**Coordinated by ELI (Warm Mentor)**");
-      expect(report).toContain("### 🔥 RIN's Security & Vulnerability Audit");
+      expect(report).toContain("### RIN: Security & Vulnerability Audit");
       expect(report).toContain(rin);
-      expect(report).toContain("### ❄️ REI's Architecture & Performance Optimization");
+      expect(report).toContain("### REI: Architecture & Performance Optimization");
       expect(report).toContain(rei);
-      expect(report).toContain("### ☀️ SORA's Creative & Feature Enhancements");
+      expect(report).toContain("### SORA: Creative & Feature Enhancements");
       expect(report).toContain(sora);
-      expect(report).toContain("### 🌱 ELI's Synthesis & Actionable Next Steps");
+      expect(report).toContain("### ELI: Synthesis & Actionable Next Steps");
       expect(report).toContain(eli);
     });
   });

@@ -14,12 +14,12 @@ export interface BannerOptions {
 
 export const PERSONA_ARCHETYPES: Record<
   Persona,
-  { title: string; subtitle: string; icon: string }
+  { title: string; subtitle: string }
 > = {
-  eli: { title: "ELI", subtitle: "Warm Mentor", icon: "🌱" },
-  rei: { title: "REI", subtitle: "Kuudere Architect", icon: "❄️" },
-  sora: { title: "SORA", subtitle: "Deredere Creative", icon: "☀️" },
-  rin: { title: "RIN", subtitle: "Tsundere Auditor", icon: "⚡" },
+  eli: { title: "ELI", subtitle: "Warm Mentor" },
+  rei: { title: "REI", subtitle: "Kuudere Architect" },
+  sora: { title: "SORA", subtitle: "Deredere Creative" },
+  rin: { title: "RIN", subtitle: "Tsundere Auditor" },
 };
 
 export function renderWelcomeBanner(options: BannerOptions): string {
@@ -57,7 +57,7 @@ export function renderWelcomeBanner(options: BannerOptions): string {
     return text + " ".repeat(spaceCount);
   };
 
-  const titleRaw = "✨ E L E N A L Y S E  v1.0.0 ✨";
+  const titleRaw = "ELENALYSE  v1.0.0";
   const titlePadSpaces = Math.max(
     0,
     Math.floor((width - 2 - titleRaw.length) / 2)
@@ -67,13 +67,13 @@ export function renderWelcomeBanner(options: BannerOptions): string {
     titleRaw +
     " ".repeat(width - 2 - titleRaw.length - titlePadSpaces);
 
-  const personaLabel = `Persona  : ${pInfo.icon} ${pInfo.title.toUpperCase()} (${pInfo.subtitle})`;
+  const personaLabel = `Persona  : ${pInfo.title.toUpperCase()} (${pInfo.subtitle})`;
   const providerLabel = `Provider : ${provider}`;
   const modelLabel = `Model    : ${model}`;
   const fallbackLabel = `Fallback : ${fallbackStr}`;
   const memoryLabel = `Memory   : ${memoryMode} (${memoryLimit} msgs)`;
   const voiceLabel = `Voice    : ${voiceStr}`;
-  const tipLabel = "💡 Type /help for commands • Type / for autocomplete dropdown";
+  const tipLabel = "Type /help for commands • Type / for autocomplete dropdown";
 
   const bannerLines = [
     personaColor(`╭${line}╮`),
@@ -83,7 +83,7 @@ export function renderWelcomeBanner(options: BannerOptions): string {
       pad(
         chalk.bold(`Persona  : `) +
           personaColor(
-            `${pInfo.icon} ${pInfo.title.toUpperCase()} (${pInfo.subtitle})`
+            `${pInfo.title.toUpperCase()} (${pInfo.subtitle})`
           ),
         personaLabel.length
       ) +
@@ -120,7 +120,7 @@ export function renderWelcomeBanner(options: BannerOptions): string {
     personaColor(`├${line}┤`),
     personaColor(`│ `) +
       pad(
-        chalk.gray(`💡 Type `) +
+        chalk.gray(`Type `) +
           chalk.cyan(`/help`) +
           chalk.gray(` for commands • Type `) +
           chalk.cyan(`/`) +
@@ -177,7 +177,7 @@ export function renderSettingsBox(options: SettingsBoxOptions): string {
     return text + " ".repeat(spaceCount);
   };
 
-  const titleRaw = "⚙️  E L E N A L Y S E   S E T T I N G S";
+  const titleRaw = "ELENALYSE  SETTINGS";
   const titlePadSpaces = Math.max(
     0,
     Math.floor((width - 2 - titleRaw.length) / 2)
@@ -193,7 +193,7 @@ export function renderSettingsBox(options: SettingsBoxOptions): string {
   const modelLabel = `Model        : ${model}`;
   const fbLabel = `Fallback     : ${fbStr}`;
   const voiceLabel = `Voice Engine : ${voiceStr}`;
-  const hintLabel = "💡 Use /setting [memory|steps|voice] <value> to modify";
+  const hintLabel = "Use /setting [memory|steps|voice] <value> to modify";
 
   const boxLines = [
     chalk.cyan(`╭${line}╮`),

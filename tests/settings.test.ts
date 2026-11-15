@@ -122,7 +122,7 @@ describe("Interactive /setting Menu and Settings Persistence", () => {
         voiceEnabled: true,
       });
 
-      expect(box).toContain("E L E N A L Y S E   S E T T I N G S");
+      expect(box).toContain("ELENALYSE  SETTINGS");
       expect(box).toContain("focus (100 msgs limit)");
       expect(box).toContain("40 steps");
       expect(box).toContain("openrouter");
