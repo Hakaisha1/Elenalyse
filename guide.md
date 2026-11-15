@@ -330,6 +330,25 @@ Setelah dapat `voiceLines`, panggil `synthesizeSpeech()` untuk tiap baris, simpa
 
 ---
 
+## FASE 4 — Update Berikutnya (Memory Modes & Elenalyse Live)
+
+### Task 4.1 — Dynamic Memory Trimming Flags (`--amnesia` & `--focus`)
+
+**Masalah**: Pengaturan `MAX_MEMORY_MESSAGES` saat ini di-hardcode ke 40 pesan. Untuk model gratis yang rentan *rate limit* (seperti OpenRouter), pengguna butuh cara untuk memangkas memori secara ekstrem. Di sisi lain, untuk pengguna model lokal (seperti Ollama), mereka mungkin butuh memori yang besar tanpa batasan ketat.
+
+**Lokasi**: `src/index.ts` dan `src/chat.ts`.
+
+**Solusi**:
+- Tambahkan argumen CLI di `index.ts`:
+  - `--amnesia`: mode hemat ekstrem (menyimpan max 10 pesan).
+  - `--focus`: mode riwayat penuh (menyimpan max 100 pesan).
+- Teruskan mode tersebut ke fungsi `trimMemory` di dalam `chat.ts` sehingga `MAX_MEMORY_MESSAGES` diubah secara dinamis.
+- Cetak status mode memori yang sedang aktif pada layar `printWelcome()`.
+
+**Kriteria selesai**: Menjalankan `elenalyse start --amnesia` membuat CLI hanya menyimpan ~3 *turn* percakapan di memori tanpa meledakkan *token context window*.
+
+---
+
 ## Kewajiban lisensi (jangan lewatkan, wajib untuk Fase 3)
 
 Tambahkan ke `README.md` bagian baru:
