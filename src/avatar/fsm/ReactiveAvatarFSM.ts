@@ -162,6 +162,11 @@ export class ReactiveAvatarFSM {
       return true;
     }
 
+    // Rule: Re-requesting speaking while already in speaking cleanly no-ops
+    if (this._state === "speaking" && targetState === "speaking") {
+      return true;
+    }
+
     // Cancel pending thinking -> speaking debounce timer if ANY new state arrives
     this._cancelPendingDebounce();
 
@@ -180,6 +185,7 @@ export class ReactiveAvatarFSM {
           this._pendingDebounceTimer = null;
           this._applyTransition("speaking", detail, targetPersona);
         }, remainingDelay);
+        this._pendingDebounceTimer?.unref?.();
         return true;
       }
     }
@@ -237,6 +243,7 @@ export class ReactiveAvatarFSM {
         });
       }
     }, durationMs);
+    this._autoResetTimer?.unref?.();
   }
 
   private _cancelPendingDebounce(): void {

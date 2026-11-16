@@ -13,11 +13,11 @@ export { generateUnifiedDiff, renderNewFilePreview };
 const execAsync = promisify(exec);
 
 const BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg', '.mp3', '.mp4', '.wav', '.ogg', '.zip', '.tar', '.gz', '.rar', '.7z', '.exe', '.dll', '.so', '.dylib', '.bin', '.dat', '.pdf', '.woff', '.woff2', '.ttf', '.eot']);
-const MAX_FILE_SIZE = 50 * 1024; // 50KB
+const MAX_FILE_SIZE = 100 * 1024; // 100KB
 const MAX_OUTPUT_CHARS = 5000;
 
 export const readFileTool = tool({
-  description: "Read the contents of a file in the user's workspace. Returns an error for binary files or files larger than 50KB.",
+  description: "Read the contents of a file in the user's workspace. Returns an error for binary files or files larger than 100KB.",
   parameters: z.object({
     filePath: z.string().describe("The relative path to the file to read, e.g., 'src/index.ts'"),
   }).passthrough(),

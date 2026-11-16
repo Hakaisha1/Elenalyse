@@ -3,6 +3,11 @@ import chalk from "chalk";
 import { handleChat, startInteractiveChat, MemoryMode, MEMORY_LIMITS, trimMemory } from "./chat.js";
 import { setConfig, Provider, Config } from "./config.js";
 import { Persona, personas } from "./personas.js";
+import { startBridgeServer } from "./bridge.js";
+import { syncAvatarPersona } from "./avatar/index.js";
+
+// Non-blocking bridge server startup for live desktop overlay connection
+startBridgeServer().catch(() => {});
 
 export { MemoryMode, MEMORY_LIMITS, trimMemory };
 
@@ -66,6 +71,7 @@ personaCmd
       process.exit(1);
     }
     setConfig({ activePersona: lowerName });
+    syncAvatarPersona(lowerName);
     console.log(chalk.green(`Active persona set to: ${lowerName.toUpperCase()}`));
   });
 

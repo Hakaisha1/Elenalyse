@@ -24,6 +24,7 @@ import { renderTokenWarningBox, runPartyOrchestration } from "./party.js";
 export { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox, interactivePrompt, renderMarkdown, pruneMemoryToolResults, renderTokenWarningBox, runPartyOrchestration };
 import { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall } from "./toolParser.js";
 export { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall };
+import { emitAvatarState, syncAvatarPersona } from "./avatar/index.js";
 
 export const MAX_AUTONOMOUS_STEPS = 25;
 
@@ -181,6 +182,7 @@ function sanitizeForMemory(messages: any[]): any[] {
 
 async function playVoiceLines(voiceLines: VoiceSegment[], speakerId: number) {
   const { activePersona } = getConfig();
+  emitAvatarState("speaking", { detail: "voice_playback", persona: activePersona });
 
   for (let i = 0; i < voiceLines.length; i++) {
     try {
@@ -209,6 +211,8 @@ async function playVoiceLines(voiceLines: VoiceSegment[], speakerId: number) {
       console.log(chalk.red(`\n[TTS Error: ${e.message}]`));
     }
   }
+
+  emitAvatarState("success", { detail: "turn_complete", persona: activePersona });
 }
 
 export async function handleChat(message: string, voiceEnabled: boolean, debug: boolean = false) {
@@ -218,6 +222,9 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
   }
 
   const { activePersona, provider, model } = getConfig();
+  syncAvatarPersona(activePersona);
+  emitAvatarState("thinking", { detail: "prompt_submitted", persona: activePersona });
+
   const systemPrompt = await getPersonaPrompt(activePersona, voiceEnabled);
   const colorName = getPersonaColor(activePersona) as keyof typeof chalk;
   
@@ -288,6 +295,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
             const tc = genResult.toolCalls[0];
             const argsSummary = formatToolArgs((tc as any).args || {});
             spinner.text = `${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
+            emitAvatarState("executing", { detail: `calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]`, persona: activePersona });
 
             if (genResult.response && genResult.response.messages) {
               currentMessages.push(...genResult.response.messages);
@@ -297,6 +305,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
                 content: genResult.text || `[Calling tool ${tc.toolName}]`,
               });
             }
+            emitAvatarState("thinking", { detail: "evaluating_tool_result", persona: activePersona });
             continue;
           }
 
@@ -317,6 +326,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
 
               const argsSummary = formatToolArgs(tc.args);
               spinner.text = `${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
+              emitAvatarState("executing", { detail: `calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]`, persona: activePersona });
 
               const toolOutput = await executeToolDirectly(tc.toolName, tc.args, toolsMap);
               combinedToolOutputs += `[System Tool Result for "${tc.toolName}"]:\n${toolOutput}\n\n`;
@@ -335,6 +345,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
               role: "user",
               content: `${combinedToolOutputs.trim()}\n\nPlease proceed with your analysis or provide your final report.`,
             });
+            emitAvatarState("thinking", { detail: "evaluating_tool_result", persona: activePersona });
             continue;
           }
 
@@ -409,6 +420,8 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
           await startBridgeServer();
           const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
           await playVoiceLines(voiceLines, speakerId);
+        } else {
+          emitAvatarState("success", { detail: "turn_complete", persona: activePersona });
         }
         break; // Successfully finished
       } catch (innerError: any) {
@@ -418,6 +431,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
           console.log(chalk.yellow(`\n[Notice: Switched to fallback provider ${config.fallbackProvider} due to error]`));
           runProvider = config.fallbackProvider;
           runModel = config.fallbackModel || model;
+          emitAvatarState("thinking", { detail: "provider_failover", persona: activePersona });
           spinner.start(`Elenalyse (${activePersona.toUpperCase()}) is retrying with ${runProvider}...`);
           continue;
         }
@@ -427,6 +441,7 @@ export async function handleChat(message: string, voiceEnabled: boolean, debug: 
   } catch (error: any) {
     spinner.fail("Failed to get response from AI engine.");
     console.error(chalk.red(error.message));
+    emitAvatarState("error", { detail: error.message, persona: activePersona });
   } finally {
     if (voiceEnabled) {
       stopBridgeServer();
@@ -855,7 +870,8 @@ export async function startInteractiveChat(
         activePersona = newPersona as any;
         config.activePersona = activePersona;
         setConfig(config);
-        broadcastPersonaEvent(activePersona);
+        syncAvatarPersona(activePersona);
+        emitAvatarState("idle", { detail: "persona_changed", persona: activePersona });
 
         if (currentHistory.length > 0) {
           const handoffNote = buildHandoffNote(oldPersonaNameForHandoff, currentHistory, sessionState);
@@ -970,6 +986,7 @@ export async function startInteractiveChat(
     lastUserPrompt = finalInput;
 
     memory[activePersona].push({ role: "user", content: finalInput });
+    emitAvatarState("thinking", { detail: "prompt_submitted", persona: activePersona });
 
     const colorName = getPersonaColor(activePersona) as keyof typeof chalk;
     const colorFn = (chalk as any)[colorName] || chalk.white;
@@ -1063,6 +1080,7 @@ export async function startInteractiveChat(
               const tc = genResult.toolCalls[0];
               const argsSummary = formatToolArgs((tc as any).args || {});
               spinner.text = `${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
+              emitAvatarState("executing", { detail: `calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]`, persona: activePersona });
 
               if (genResult.response && genResult.response.messages) {
                 currentMessages.push(...genResult.response.messages);
@@ -1072,6 +1090,7 @@ export async function startInteractiveChat(
                   content: genResult.text || `[Calling tool ${tc.toolName}]`,
                 });
               }
+              emitAvatarState("thinking", { detail: "evaluating_tool_result", persona: activePersona });
               continue;
             }
 
@@ -1092,6 +1111,7 @@ export async function startInteractiveChat(
 
                 const argsSummary = formatToolArgs(tc.args);
                 spinner.text = `${activePersona.toUpperCase()} is analyzing: calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]...`;
+                emitAvatarState("executing", { detail: `calling ${tc.toolName}(${argsSummary}) [Step ${step}/${maxSteps}]`, persona: activePersona });
 
                 const filePath = tc.args?.filePath || tc.args?.dirPath;
                 if (filePath && typeof filePath === "string") {
@@ -1115,6 +1135,7 @@ export async function startInteractiveChat(
                 role: "user",
                 content: `${combinedToolOutputs.trim()}\n\nPlease proceed with your analysis or provide your final report.`,
               });
+              emitAvatarState("thinking", { detail: "evaluating_tool_result", persona: activePersona });
               continue;
             }
 
@@ -1213,7 +1234,9 @@ export async function startInteractiveChat(
 
           if (activeVoiceEnabled && voiceLines.length > 0) {
             const speakerId = PERSONA_SPEAKER_MAP[activePersona] || 2;
-            playVoiceLines(voiceLines, speakerId); // Fire and forget
+            playVoiceLines(voiceLines, speakerId); // Fire and forget (will emit speaking then success upon finish)
+          } else {
+            emitAvatarState("success", { detail: "turn_complete", persona: activePersona });
           }
 
           break; // Successfully finished turn
@@ -1224,6 +1247,7 @@ export async function startInteractiveChat(
             console.log(chalk.yellow(`\n[Notice: Switched to fallback provider ${config.fallbackProvider} due to error]`));
             runProvider = config.fallbackProvider;
             runModel = config.fallbackModel || model;
+            emitAvatarState("thinking", { detail: "provider_failover", persona: activePersona });
             spinner.start(`Elenalyse (${activePersona.toUpperCase()}) is retrying with ${runProvider}...`);
             continue;
           }
@@ -1234,9 +1258,11 @@ export async function startInteractiveChat(
       spinner.stop();
       if (isAborted || abortController.signal.aborted || error.name === "AbortError" || error.message?.includes("aborted")) {
         console.log(chalk.yellow("\n[!] Generation aborted by user."));
+        emitAvatarState("idle", { detail: "user_aborted", persona: activePersona });
       } else {
         console.log(chalk.red("\n✖ Failed to get response from AI engine."));
         console.log(chalk.red(error.message));
+        emitAvatarState("error", { detail: error.message, persona: activePersona });
       }
       memory[activePersona].pop(); // Revert user message so they can retry
     } finally {

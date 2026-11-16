@@ -1,6 +1,7 @@
 import { generateText } from "ai";
 import chalk from "chalk";
 import { getPartyPersonaPrompt, getProjectContext, Persona } from "./personas.js";
+import { emitAvatarState, syncAvatarPersona } from "./avatar/index.js";
 
 /**
  * Party Mode - Persona Quartet Simultaneous Orchestration Engine
@@ -105,6 +106,12 @@ export async function runPartyOrchestration(
   let totalCompletionTokens = 0;
 
   // 3. Run RIN, REI, and SORA evaluations simultaneously via Promise.all
+  syncAvatarPersona("eli");
+  emitAvatarState("thinking", {
+    detail: "party_mode_quartet",
+    persona: "eli",
+  });
+
   options.onProgress?.(
     "Party Mode: RIN, REI, and SORA analyzing simultaneously under ELI..."
   );
@@ -147,6 +154,10 @@ export async function runPartyOrchestration(
   addUsage(soraResult);
 
   // 4. ELI synthesizes all three viewpoints into unified roadmap
+  emitAvatarState("thinking", {
+    detail: "party_eli_synthesizing",
+    persona: "eli",
+  });
   options.onProgress?.(
     "Party Mode: ELI synthesizing Quartet findings into unified roadmap..."
   );
@@ -171,6 +182,11 @@ export async function runPartyOrchestration(
     reiResult.text || "",
     soraResult.text || ""
   );
+
+  emitAvatarState("success", {
+    detail: "party_mode_complete",
+    persona: "eli",
+  });
 
   return {
     report: finalReport,
