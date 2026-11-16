@@ -45,13 +45,13 @@ export interface MockBoneNode {
 
 export interface MockExpressionManager {
   setValue: (expressionName: string, value: number) => void;
-  getValue?: (expressionName: string) => number;
+  getValue?: (expressionName: string) => number | null;
 }
 
 export interface VRMLike {
   humanoid?: {
-    getNormalizedBoneNode?: (boneName: string) => MockBoneNode | null | undefined;
-    getRawBoneNode?: (boneName: string) => MockBoneNode | null | undefined;
+    getNormalizedBoneNode?: (boneName: any) => MockBoneNode | null | undefined;
+    getRawBoneNode?: (boneName: any) => MockBoneNode | null | undefined;
   };
   expressionManager?: MockExpressionManager;
 }

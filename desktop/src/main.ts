@@ -3,6 +3,13 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRM, VRMUtils } from "@pixiv/three-vrm";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow, currentMonitor } from "@tauri-apps/api/window";
+import {
+  ReactiveVRMController,
+  resolveModelPath,
+  shouldReloadModel,
+  PersonaId,
+} from "./avatar/ReactiveVRMController.js";
+import { DiagnosticHUD } from "./ui/DiagnosticHUD.js";
 
 // --- Tauri Window Dragging & Bottom-Left Positioning ---
 try {
@@ -157,11 +164,19 @@ window.addEventListener("mouseleave", () => {
 // --- VRM Loading & Natural Posing ---
 let currentVRM: VRM | null = null;
 let initialHipsY = 0;
+let activePersona: PersonaId = "rei";
+
+const vrmController = new ReactiveVRMController(null, {
+  initialPersona: activePersona,
+  initialState: "idle",
+});
+
+let hud: DiagnosticHUD | null = null;
 
 const loader = new GLTFLoader();
 loader.register((parser: any) => new VRMLoaderPlugin(parser));
 
-const MODEL_PATH = "/models/REI_Model.vrm";
+const MODEL_PATH = resolveModelPath(activePersona);
 
 // ============================================================================
 // SISTEM POSE DASAR KUUDERE (6 POSE DENGAN BOBOT & PENGURANGAN GERAK TUBUH)
@@ -536,69 +551,103 @@ function frameCameraToModel(vrm: VRM) {
   });
 }
 
-loader.load(
-  MODEL_PATH,
-  (gltf: any) => {
-    const vrm = gltf.userData.vrm as VRM;
-    if (!vrm) {
-      console.error("Failed to load VRM data from glTF");
-      return;
-    }
+function loadVRMModel(modelPath: string, persona: PersonaId, onLoaded?: () => void) {
+  if (currentVRM) {
+    scene.remove(currentVRM.scene);
+    currentVRM = null;
+  }
 
-    VRMUtils.removeUnnecessaryJoints(vrm.scene);
-    VRMUtils.removeUnnecessaryVertices(vrm.scene);
-    VRMUtils.rotateVRM0(vrm);
-
-    const hips = vrm.humanoid?.getNormalizedBoneNode("hips");
-    if (hips) {
-      initialHipsY = hips.position.y;
-    }
-
-    scene.add(vrm.scene);
-    currentVRM = vrm;
-    baseModelRotationY = vrm.scene.rotation.y;
-
-    // Connect eye lookAt to dynamic target
-    if (vrm.lookAt) {
-      vrm.lookAt.target = lookAtTarget;
-      vrm.lookAt.autoUpdate = true;
-    }
-
-    // Apply asymmetrical resting arm pose and natural non-uniform finger curls
-    if (vrm.humanoid) {
-      const initialPose = POSES.attention;
-      const leftUpperArm = vrm.humanoid.getNormalizedBoneNode("leftUpperArm");
-      if (leftUpperArm) leftUpperArm.rotation.set(initialPose.leftUpperArm.x, initialPose.leftUpperArm.y, initialPose.leftUpperArm.z);
-      const rightUpperArm = vrm.humanoid.getNormalizedBoneNode("rightUpperArm");
-      if (rightUpperArm) rightUpperArm.rotation.set(initialPose.rightUpperArm.x, initialPose.rightUpperArm.y, initialPose.rightUpperArm.z);
-
-      const leftLowerArm = vrm.humanoid.getNormalizedBoneNode("leftLowerArm");
-      if (leftLowerArm) leftLowerArm.rotation.set(initialPose.leftLowerArm.x, initialPose.leftLowerArm.y, initialPose.leftLowerArm.z);
-      const rightLowerArm = vrm.humanoid.getNormalizedBoneNode("rightLowerArm");
-      if (rightLowerArm) rightLowerArm.rotation.set(initialPose.rightLowerArm.x, initialPose.rightLowerArm.y, initialPose.rightLowerArm.z);
-
-      // Relax fingers with organic asymmetrical curls from unified descriptors
-      for (let i = 0; i < FINGER_DESCRIPTORS.length; i++) {
-        const node = vrm.humanoid.getNormalizedBoneNode(FINGER_DESCRIPTORS[i].bone as any);
-        if (node) node.rotation.z = currentFingerBaseAngles[i];
+  loader.load(
+    modelPath,
+    (gltf: any) => {
+      const vrm = gltf.userData.vrm as VRM;
+      if (!vrm) {
+        console.error("Failed to load VRM data from glTF:", modelPath);
+        return;
       }
 
-      vrm.scene.updateMatrixWorld(true);
+      VRMUtils.removeUnnecessaryJoints(vrm.scene);
+      VRMUtils.removeUnnecessaryVertices(vrm.scene);
+      VRMUtils.rotateVRM0(vrm);
+
+      const hips = vrm.humanoid?.getNormalizedBoneNode("hips");
+      if (hips) {
+        initialHipsY = hips.position.y;
+      }
+
+      scene.add(vrm.scene);
+      currentVRM = vrm;
+      vrmController.setVRM(vrm);
+      baseModelRotationY = vrm.scene.rotation.y;
+
+      // Connect eye lookAt to dynamic target
+      if (vrm.lookAt) {
+        vrm.lookAt.target = lookAtTarget;
+        vrm.lookAt.autoUpdate = true;
+      }
+
+      // Apply asymmetrical resting arm pose and natural non-uniform finger curls
+      if (vrm.humanoid) {
+        const initialPose = POSES.attention;
+        const leftUpperArm = vrm.humanoid.getNormalizedBoneNode("leftUpperArm");
+        if (leftUpperArm) leftUpperArm.rotation.set(initialPose.leftUpperArm.x, initialPose.leftUpperArm.y, initialPose.leftUpperArm.z);
+        const rightUpperArm = vrm.humanoid.getNormalizedBoneNode("rightUpperArm");
+        if (rightUpperArm) rightUpperArm.rotation.set(initialPose.rightUpperArm.x, initialPose.rightUpperArm.y, initialPose.rightUpperArm.z);
+
+        const leftLowerArm = vrm.humanoid.getNormalizedBoneNode("leftLowerArm");
+        if (leftLowerArm) leftLowerArm.rotation.set(initialPose.leftLowerArm.x, initialPose.leftLowerArm.y, initialPose.leftLowerArm.z);
+        const rightLowerArm = vrm.humanoid.getNormalizedBoneNode("rightLowerArm");
+        if (rightLowerArm) rightLowerArm.rotation.set(initialPose.rightLowerArm.x, initialPose.rightLowerArm.y, initialPose.rightLowerArm.z);
+
+        // Relax fingers with organic asymmetrical curls from unified descriptors
+        for (let i = 0; i < FINGER_DESCRIPTORS.length; i++) {
+          const node = vrm.humanoid.getNormalizedBoneNode(FINGER_DESCRIPTORS[i].bone as any);
+          if (node) node.rotation.z = currentFingerBaseAngles[i];
+        }
+
+        vrm.scene.updateMatrixWorld(true);
+      }
+
+      // Auto-frame camera so half body is framed
+      frameCameraToModel(vrm);
+
+      hud?.updatePersona(persona, modelPath, true);
+      console.log(`VRM loaded successfully: ${persona} (${modelPath})`);
+      onLoaded?.();
+    },
+    (progress: ProgressEvent) => {
+      const percent = ((progress.loaded / progress.total) * 100).toFixed(1);
+      console.log(`Loading VRM: ${percent}%`);
+    },
+    (error: unknown) => {
+      console.error("Error loading VRM:", error);
     }
+  );
+}
 
-    // Auto-frame camera so half body is framed
-    frameCameraToModel(vrm);
+function handlePersonaChange(nextPersonaStr: string) {
+  const nextPersona = nextPersonaStr.toLowerCase() as PersonaId;
+  if (!["eli", "rei", "sora", "rin"].includes(nextPersona)) return;
+  const currentPersona = vrmController.persona;
+  if (currentPersona === nextPersona) return;
 
-    console.log("Rei VRM loaded successfully with Kuudere AI idle setup.");
-  },
-  (progress: ProgressEvent) => {
-    const percent = ((progress.loaded / progress.total) * 100).toFixed(1);
-    console.log(`Loading VRM: ${percent}%`);
-  },
-  (error: unknown) => {
-    console.error("Error loading VRM:", error);
+  if (!shouldReloadModel(currentPersona, nextPersona)) {
+    // In-place persona switch without mesh reload from disk
+    vrmController.setPersona(nextPersona);
+    hud?.updatePersona(nextPersona, resolveModelPath(nextPersona), false);
+    console.log(`[Avatar] Persona updated in-place: ${currentPersona} -> ${nextPersona} (no mesh reload)`);
+  } else {
+    // 3D mesh reload required
+    vrmController.setPersona(nextPersona);
+    const newModelPath = resolveModelPath(nextPersona);
+    hud?.updatePersona(nextPersona, newModelPath, true);
+    console.log(`[Avatar] Reloading 3D VRM model for persona ${nextPersona}: ${newModelPath}`);
+    loadVRMModel(newModelPath, nextPersona);
   }
-);
+}
+
+// Initial VRM model load
+loadVRMModel(MODEL_PATH, activePersona);
 
 // ============================================================================
 // CONFIGURASI ANIMASI IDLE LENGAN & TUBUH (KUUDERE CLINICAL AI)
@@ -1135,18 +1184,62 @@ window.addEventListener("pointerdown", () => {
 function initBridgeConnection() {
   const bridgeUrl = "http://127.0.0.1:39420/events";
 
+  // Fetch initial state snapshot from REST endpoint
+  fetch("http://127.0.0.1:39420/state")
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      if (data?.state) {
+        vrmController.transitionTo(data.state);
+        if (data.persona) handlePersonaChange(data.persona);
+        hud?.updateTelemetry(data, true);
+      }
+    })
+    .catch(() => {
+      hud?.setBridgeOnline(false);
+    });
+
   try {
     const es = new EventSource(bridgeUrl);
 
-    es.addEventListener("connected", () => {
+    es.onopen = () => {
       console.log("[Bridge] Connected to Elenalyse CLI voice stream.");
+      hud?.setBridgeOnline(true);
+    };
+
+    es.addEventListener("connected", () => {
+      hud?.setBridgeOnline(true);
     });
+
+    const handleStateChange = (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload?.state) {
+          vrmController.transitionTo(payload.state);
+          if (payload.persona) handlePersonaChange(payload.persona);
+          hud?.updateTelemetry(payload, true);
+        }
+      } catch (err) {
+        console.error("[Bridge] Error parsing avatar state event:", err);
+      }
+    };
+
+    es.addEventListener("avatar:state", handleStateChange);
+    es.addEventListener("state", handleStateChange);
 
     es.addEventListener("speak", (e: MessageEvent) => {
       try {
         const payload: VoicePayload = JSON.parse(e.data);
         console.log(`[Bridge] Speak event: ${payload.persona} (${payload.text.slice(0, 30)}...)`);
         lipSyncCtrl.enqueueVoice(payload);
+        vrmController.transitionTo("speaking");
+        hud?.updateTelemetry(
+          {
+            state: "speaking",
+            persona: vrmController.persona,
+            detail: payload.text.slice(0, 30),
+          },
+          true
+        );
       } catch (err) {
         console.error("[Bridge] Error parsing speak event payload", err);
       }
@@ -1156,14 +1249,16 @@ function initBridgeConnection() {
       try {
         const data = JSON.parse(e.data);
         console.log(`[Bridge] Persona changed to: ${data.persona}`);
+        if (data?.persona) handlePersonaChange(data.persona);
       } catch (err) {}
     });
 
     es.onerror = () => {
-      // Silent retry by browser EventSource
+      hud?.setBridgeOnline(false);
     };
   } catch (err) {
     console.warn("[Bridge] EventSource connection failed", err);
+    hud?.setBridgeOnline(false);
   }
 }
 
@@ -1661,12 +1756,95 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = Math.min(clock.getDelta(), 0.1); // Cap delta to prevent animation jumping
   updateIdleAnimation(delta);
+  vrmController.update(delta);
+  hud?.update(delta);
   if (currentVRM) {
     currentVRM.scene.rotation.y = baseModelRotationY + userModelRotationY;
   }
   camera.lookAt(cameraLookTarget);
   renderer.render(scene, camera);
 }
+
+// Initialize Diagnostic HUD with Thesis Simulation Actions (BB-01..07)
+hud = new DiagnosticHUD((action, payload) => {
+  switch (action) {
+    case "BB-01":
+      vrmController.transitionTo("idle");
+      hud?.updateTelemetry({ state: "idle", persona: vrmController.persona, detail: "manual_bb01_idle" });
+      break;
+    case "BB-02":
+      vrmController.transitionTo("thinking");
+      hud?.updateTelemetry({ state: "thinking", persona: vrmController.persona, detail: "manual_bb02_thinking_250ms" });
+      break;
+    case "BB-03":
+      vrmController.transitionTo("thinking");
+      hud?.updateTelemetry({ state: "thinking", persona: vrmController.persona, detail: "bb03_thinking_dwell_start" });
+      setTimeout(() => {
+        vrmController.transitionTo("speaking");
+        hud?.updateTelemetry({ state: "speaking", persona: vrmController.persona, detail: "bb03_speaking_debounced" });
+      }, 300);
+      break;
+    case "BB-04":
+      vrmController.transitionTo("thinking");
+      hud?.updateTelemetry({ state: "thinking", persona: vrmController.persona, detail: "bb04_prompt" });
+      setTimeout(() => {
+        vrmController.transitionTo("executing");
+        hud?.updateTelemetry({ state: "executing", persona: vrmController.persona, detail: "bb04_readFile_step_1" });
+        setTimeout(() => {
+          vrmController.transitionTo("thinking");
+          hud?.updateTelemetry({ state: "thinking", persona: vrmController.persona, detail: "bb04_eval_result" });
+          setTimeout(() => {
+            vrmController.transitionTo("speaking");
+            hud?.updateTelemetry({ state: "speaking", persona: vrmController.persona, detail: "bb04_answer" });
+          }, 300);
+        }, 400);
+      }, 300);
+      break;
+    case "BB-05":
+      vrmController.transitionTo("success");
+      hud?.updateTelemetry({ state: "success", persona: vrmController.persona, detail: "bb05_success_2000ms" });
+      setTimeout(() => {
+        if (vrmController.state === "success") {
+          vrmController.transitionTo("idle");
+          hud?.updateTelemetry({ state: "idle", persona: vrmController.persona, detail: "auto_reset_from_success" });
+        }
+      }, 2000);
+      break;
+    case "BB-06":
+      vrmController.transitionTo("error");
+      hud?.updateTelemetry({ state: "error", persona: vrmController.persona, detail: "bb06_fatal_error_150ms" });
+      setTimeout(() => {
+        if (vrmController.state === "error") {
+          vrmController.transitionTo("idle");
+          hud?.updateTelemetry({ state: "idle", persona: vrmController.persona, detail: "auto_reset_from_error" });
+        }
+      }, 2500);
+      break;
+    case "BB-07":
+      vrmController.transitionTo("thinking");
+      hud?.updateTelemetry({ state: "thinking", persona: vrmController.persona, detail: "bb07_thinking_start" });
+      setTimeout(() => {
+        vrmController.transitionTo("error");
+        hud?.updateTelemetry({ state: "error", persona: vrmController.persona, detail: "bb07_rapid_preempt_10ms" });
+        setTimeout(() => {
+          if (vrmController.state === "error") {
+            vrmController.transitionTo("idle");
+            hud?.updateTelemetry({ state: "idle", persona: vrmController.persona, detail: "auto_reset_from_error" });
+          }
+        }, 2500);
+      }, 10);
+      break;
+    case "RESET":
+      vrmController.transitionTo("idle");
+      hud?.updateTelemetry({ state: "idle", persona: vrmController.persona, detail: "reset" });
+      break;
+    case "SET_PERSONA":
+      if (payload) {
+        handlePersonaChange(payload as string);
+      }
+      break;
+  }
+});
 
 animate();
 
@@ -1682,6 +1860,8 @@ window.addEventListener("resize", () => {
 
 // Expose lipSync controller to window for inspection & debug
 (window as any).lipSync = lipSyncCtrl;
+(window as any).vrmController = vrmController;
+(window as any).hud = hud;
 
 // Start listening for CLI voice events via SSE Bridge
 initBridgeConnection();
