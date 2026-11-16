@@ -29,6 +29,24 @@ export const PERSONA_IDS = ["eli", "rei", "sora", "rin"] as const;
 export type PersonaId = (typeof PERSONA_IDS)[number];
 export const PersonaIdSchema = z.enum(PERSONA_IDS);
 
+export const PERSONA_MODEL_MAP: Record<PersonaId, string> = {
+  eli: "/models/ELI_Model.vrm",
+  rei: "/models/REI_Model.vrm",
+  sora: "/models/ELI_Model.vrm", // Fallback to ELI
+  rin: "/models/REI_Model.vrm",  // Fallback to REI
+};
+
+export function resolveModelPath(persona: PersonaId): string {
+  return PERSONA_MODEL_MAP[persona] || "/models/ELI_Model.vrm";
+}
+
+export function shouldReloadModel(
+  currentPersona: PersonaId,
+  nextPersona: PersonaId
+): boolean {
+  return resolveModelPath(currentPersona) !== resolveModelPath(nextPersona);
+}
+
 /**
  * Standard SSE payload broadcasted by the CLI bridge and consumed by the Tauri desktop overlay.
  */

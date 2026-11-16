@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Static VRM model binaries copied or generated at build/dev time
+public/models/ELI_Model.vrm
+public/models/*_Model.vrm.tmp
+
