@@ -18,6 +18,10 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
       head: { rotation: { x: 0, y: 0, z: 0 } },
       spine: { rotation: { x: 0, y: 0, z: 0 } },
       chest: { rotation: { x: 0, y: 0, z: 0 } },
+      leftUpperArm: { rotation: { x: 0, y: 0, z: 0 } },
+      rightUpperArm: { rotation: { x: 0, y: 0, z: 0 } },
+      leftLowerArm: { rotation: { x: 0, y: 0, z: 0 } },
+      rightLowerArm: { rotation: { x: 0, y: 0, z: 0 } },
     };
     mockExpressions = {};
 
@@ -140,13 +144,28 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
       expect(mockExpressions.oh).toBeGreaterThanOrEqual(0);
     });
 
-    it("success state activates affirmative head nod and high happy blendshape", () => {
+    it("success state activates affirmative head nod, subtle tilt, and calibrated warm smile", () => {
       controller.transitionTo("success");
       controller.update(0.25); // Complete crossfade
       controller.update(0.1);
 
-      // Happy blendshape matches high confidence (0.85)
-      expect(mockExpressions.happy).toBeCloseTo(0.85, 2);
+      // Calibrated warm subtle smile: happy 0.40 blended with relaxed 0.55
+      expect(mockExpressions.happy).toBeCloseTo(0.40, 2);
+      expect(mockExpressions.relaxed).toBeCloseTo(0.55, 2);
+      // Subtle head tilt
+      expect(mockBones.head.rotation.z).toBeCloseTo(0.06, 2);
+    });
+
+    it("maintains natural relaxed downward arm posture across states", () => {
+      controller.update(0.1); // in idle
+      expect(mockBones.leftUpperArm.rotation.z).toBeCloseTo(-1.22, 2);
+      expect(mockBones.rightUpperArm.rotation.z).toBeCloseTo(1.20, 2);
+      expect(mockBones.leftLowerArm.rotation.x).toBeLessThan(0); // elbow bend
+
+      controller.transitionTo("thinking");
+      controller.update(0.25);
+      expect(mockBones.leftUpperArm.rotation.z).toBeCloseTo(-1.22, 2);
+      expect(mockBones.rightUpperArm.rotation.z).toBeCloseTo(1.20, 2);
     });
 
     it("error state activates pullback, head shake, and surprised/sad expressions", () => {

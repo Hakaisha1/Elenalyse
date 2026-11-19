@@ -103,11 +103,13 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setClearColor(0x000000, 0); // 100% transparent background
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 
 const scene = new THREE.Scene();
 
-// Camera setup with dynamic look target
-const cameraLookTarget = new THREE.Vector3(0, 0.8, 0);
+// Camera setup with dynamic look target (calibrated headroom)
+const cameraLookTarget = new THREE.Vector3(0, 0.85, 0);
 
 const camera = new THREE.PerspectiveCamera(
   26,
@@ -115,7 +117,7 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   30
 );
-camera.position.set(0, 0.8, 3.2);
+camera.position.set(0, 0.85, 3.45);
 camera.lookAt(cameraLookTarget);
 
 // Mouse wheel to zoom in / out smoothly
@@ -130,14 +132,14 @@ window.addEventListener(
 );
 
 // --- Lighting ---
-const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
 scene.add(ambientLight);
 
-const keyLight = new THREE.DirectionalLight(0xfff5ee, 1.6);
+const keyLight = new THREE.DirectionalLight(0xfff5ee, 1.15);
 keyLight.position.set(1.5, 2.5, 1.5);
 scene.add(keyLight);
 
-const fillLight = new THREE.DirectionalLight(0xccddff, 0.8);
+const fillLight = new THREE.DirectionalLight(0xccddff, 0.5);
 fillLight.position.set(-1.5, 1.5, -0.5);
 scene.add(fillLight);
 
@@ -525,18 +527,18 @@ function frameCameraToModel(vrm: VRM) {
   const topY = bbox.max.y;
   const bottomY = Math.max(bbox.min.y, hipsPos.y - 0.1);
   const halfBodyHeight = Math.max(0.65, topY - bottomY);
-  const halfBodyCenterY = bottomY + halfBodyHeight * 0.52;
+  const halfBodyCenterY = 0.85; // calibrated center with headroom for ahoge
 
   // Upper body width (shoulders + relaxed arms)
   const upperBodyWidth = 0.55;
 
-  const margin = 1.18; // 18% margin for comfortable head and arm breathing room
+  const margin = 1.25; // comfortable headroom so ahoge never clips during nods
   const halfFovRad = THREE.MathUtils.degToRad(camera.fov / 2);
 
   const distForHeight = ((halfBodyHeight * margin) / 2) / Math.tan(halfFovRad);
   const distForWidth = ((upperBodyWidth * margin) / 2) / (Math.tan(halfFovRad) * camera.aspect);
 
-  const optimalDistance = Math.max(distForHeight, distForWidth);
+  const optimalDistance = Math.max(3.45, Math.max(distForHeight, distForWidth));
 
   cameraLookTarget.set(0, halfBodyCenterY, 0);
   camera.position.set(0, halfBodyCenterY, optimalDistance);
@@ -577,6 +579,15 @@ function loadVRMModel(modelPath: string, persona: PersonaId, onLoaded?: () => vo
 
       scene.add(vrm.scene);
       currentVRM = vrm;
+
+      // Eliminate skirt & fabric shadow artifacts across all VRM meshes
+      vrm.scene.traverse((obj: any) => {
+        if (obj.isMesh) {
+          obj.castShadow = false;
+          obj.receiveShadow = false;
+        }
+      });
+
       vrmController.setVRM(vrm);
       baseModelRotationY = vrm.scene.rotation.y;
 

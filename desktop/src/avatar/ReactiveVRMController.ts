@@ -60,6 +60,10 @@ export interface PoseStateValues {
   head: MockRotation;
   spine: MockRotation;
   chest: MockRotation;
+  leftUpperArm: MockRotation;
+  rightUpperArm: MockRotation;
+  leftLowerArm: MockRotation;
+  rightLowerArm: MockRotation;
   expressions: Record<string, number>;
 }
 
@@ -230,6 +234,13 @@ export class ReactiveVRMController {
     const head: MockRotation = { x: 0, y: 0, z: 0 };
     const spine: MockRotation = { x: 0, y: 0, z: 0 };
     const chest: MockRotation = { x: 0, y: 0, z: 0 };
+
+    // Natural Relaxed Arm Posture (downward along torso with slight asymmetry to eliminate stiff A-pose)
+    const leftUpperArm: MockRotation = { x: 0.02, y: -0.06, z: -1.22 };
+    const rightUpperArm: MockRotation = { x: -0.02, y: 0.08, z: 1.20 };
+    const leftLowerArm: MockRotation = { x: -0.25, y: -0.15, z: -0.02 };
+    const rightLowerArm: MockRotation = { x: 0.22, y: 0.18, z: 0.03 };
+
     const expressions: Record<string, number> = {
       blink: 0,
       happy: 0,
@@ -289,9 +300,14 @@ export class ReactiveVRMController {
       }
 
       case "success": {
-        // Affirmative head nod gesture
-        head.x = Math.sin(Math.min(stateTime, 1.5) * 4.0) * 0.08;
-        expressions.happy = 0.85;
+        // Affirmative head nod gesture with ease-out curve + subtle tilt
+        const nodProgress = Math.min(stateTime, 1.2);
+        const easeOutFactor = 1.0 - Math.min(1.0, stateTime / 1.5);
+        head.x = Math.sin(nodProgress * Math.PI * 2.0) * 0.07 * easeOutFactor;
+        head.z = 0.06; // Subtle head tilt
+        // Warm subtle smile (calibrated happy ~0.40 blended with relaxed ~0.55 instead of wide mouth open)
+        expressions.happy = 0.40;
+        expressions.relaxed = 0.55;
         break;
       }
 
@@ -305,7 +321,16 @@ export class ReactiveVRMController {
       }
     }
 
-    return { head, spine, chest, expressions };
+    return {
+      head,
+      spine,
+      chest,
+      leftUpperArm,
+      rightUpperArm,
+      leftLowerArm,
+      rightLowerArm,
+      expressions,
+    };
   }
 
   private _lerpPoseValues(
@@ -330,6 +355,26 @@ export class ReactiveVRMController {
       y: lerp(a.chest.y, b.chest.y),
       z: lerp(a.chest.z, b.chest.z),
     };
+    const leftUpperArm: MockRotation = {
+      x: lerp(a.leftUpperArm.x, b.leftUpperArm.x),
+      y: lerp(a.leftUpperArm.y, b.leftUpperArm.y),
+      z: lerp(a.leftUpperArm.z, b.leftUpperArm.z),
+    };
+    const rightUpperArm: MockRotation = {
+      x: lerp(a.rightUpperArm.x, b.rightUpperArm.x),
+      y: lerp(a.rightUpperArm.y, b.rightUpperArm.y),
+      z: lerp(a.rightUpperArm.z, b.rightUpperArm.z),
+    };
+    const leftLowerArm: MockRotation = {
+      x: lerp(a.leftLowerArm.x, b.leftLowerArm.x),
+      y: lerp(a.leftLowerArm.y, b.leftLowerArm.y),
+      z: lerp(a.leftLowerArm.z, b.leftLowerArm.z),
+    };
+    const rightLowerArm: MockRotation = {
+      x: lerp(a.rightLowerArm.x, b.rightLowerArm.x),
+      y: lerp(a.rightLowerArm.y, b.rightLowerArm.y),
+      z: lerp(a.rightLowerArm.z, b.rightLowerArm.z),
+    };
 
     const expressions: Record<string, number> = {};
     const allKeys = new Set([
@@ -343,7 +388,16 @@ export class ReactiveVRMController {
       expressions[key] = lerp(valA, valB);
     }
 
-    return { head, spine, chest, expressions };
+    return {
+      head,
+      spine,
+      chest,
+      leftUpperArm,
+      rightUpperArm,
+      leftLowerArm,
+      rightLowerArm,
+      expressions,
+    };
   }
 
   private _applyPoseValues(values: PoseStateValues): void {
@@ -379,6 +433,34 @@ export class ReactiveVRMController {
       chestBone.rotation.x = values.chest.x;
       chestBone.rotation.y = values.chest.y;
       chestBone.rotation.z = values.chest.z;
+    }
+
+    const leftUpperArmBone = getBone("leftUpperArm");
+    if (leftUpperArmBone) {
+      leftUpperArmBone.rotation.x = values.leftUpperArm.x;
+      leftUpperArmBone.rotation.y = values.leftUpperArm.y;
+      leftUpperArmBone.rotation.z = values.leftUpperArm.z;
+    }
+
+    const rightUpperArmBone = getBone("rightUpperArm");
+    if (rightUpperArmBone) {
+      rightUpperArmBone.rotation.x = values.rightUpperArm.x;
+      rightUpperArmBone.rotation.y = values.rightUpperArm.y;
+      rightUpperArmBone.rotation.z = values.rightUpperArm.z;
+    }
+
+    const leftLowerArmBone = getBone("leftLowerArm");
+    if (leftLowerArmBone) {
+      leftLowerArmBone.rotation.x = values.leftLowerArm.x;
+      leftLowerArmBone.rotation.y = values.leftLowerArm.y;
+      leftLowerArmBone.rotation.z = values.leftLowerArm.z;
+    }
+
+    const rightLowerArmBone = getBone("rightLowerArm");
+    if (rightLowerArmBone) {
+      rightLowerArmBone.rotation.x = values.rightLowerArm.x;
+      rightLowerArmBone.rotation.y = values.rightLowerArm.y;
+      rightLowerArmBone.rotation.z = values.rightLowerArm.z;
     }
 
     if (expressionManager) {
