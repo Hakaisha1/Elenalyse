@@ -6,7 +6,6 @@ import { getCurrentWindow, currentMonitor } from "@tauri-apps/api/window";
 import {
   ReactiveVRMController,
   resolveModelPath,
-  shouldReloadModel,
   PersonaId,
 } from "./avatar/ReactiveVRMController.js";
 import { DiagnosticHUD } from "./ui/DiagnosticHUD.js";
@@ -232,8 +231,6 @@ let hud: DiagnosticHUD | null = null;
 
 const loader = new GLTFLoader();
 loader.register((parser: any) => new VRMLoaderPlugin(parser));
-
-const MODEL_PATH = resolveModelPath(activePersona);
 
 // ============================================================================
 // SISTEM POSE DASAR KUUDERE (6 POSE DENGAN BOBOT & PENGURANGAN GERAK TUBUH)
@@ -614,19 +611,38 @@ function frameCameraToModel(vrm: VRM) {
   });
 }
 
+let currentLoadToken = 0;
+
 function loadVRMModel(modelPath: string, persona: PersonaId, onLoaded?: () => void) {
-  if (currentVRM) {
-    scene.remove(currentVRM.scene);
-    currentVRM = null;
-  }
+  const thisToken = ++currentLoadToken;
+  console.log(`[Avatar] Requesting VRM model load (#${thisToken}): ${persona} (${modelPath})`);
 
   loader.load(
     modelPath,
     (gltf: any) => {
-      const vrm = gltf.userData.vrm as VRM;
+      // If a newer load was requested while this one was in-flight, discard stale model immediately
+      if (thisToken !== currentLoadToken) {
+        console.log(`[Avatar] Discarding stale in-flight VRM load (#${thisToken}): ${modelPath}`);
+        const staleVrm = gltf.userData?.vrm as VRM | undefined;
+        if (staleVrm?.scene) {
+          VRMUtils.deepDispose(staleVrm.scene);
+        }
+        return;
+      }
+
+      const vrm = gltf.userData?.vrm as VRM | undefined;
       if (!vrm) {
         console.error("Failed to load VRM data from glTF:", modelPath);
         return;
+      }
+
+      // Purge and deepDispose ALL existing VRM models from the Three.js scene to prevent overlapping
+      for (let i = scene.children.length - 1; i >= 0; i--) {
+        const child = scene.children[i];
+        if (child.userData?.isVRM) {
+          scene.remove(child);
+          VRMUtils.deepDispose(child);
+        }
       }
 
       VRMUtils.removeUnnecessaryJoints(vrm.scene);
@@ -638,6 +654,7 @@ function loadVRMModel(modelPath: string, persona: PersonaId, onLoaded?: () => vo
         initialHipsY = hips.position.y;
       }
 
+      vrm.scene.userData.isVRM = true;
       scene.add(vrm.scene);
       currentVRM = vrm;
 
@@ -658,7 +675,7 @@ function loadVRMModel(modelPath: string, persona: PersonaId, onLoaded?: () => vo
         vrm.lookAt.autoUpdate = true;
       }
 
-      // Apply asymmetrical resting arm pose and natural non-uniform finger curls
+      // Apply resting arm pose and natural non-uniform finger curls
       if (vrm.humanoid) {
         const initialPose = POSES.attention;
         const leftUpperArm = vrm.humanoid.getNormalizedBoneNode("leftUpperArm");
@@ -680,19 +697,19 @@ function loadVRMModel(modelPath: string, persona: PersonaId, onLoaded?: () => vo
         vrm.scene.updateMatrixWorld(true);
       }
 
-      // Auto-frame camera so half body is framed
+      // Auto-frame camera so half body portrait is framed
       frameCameraToModel(vrm);
 
       hud?.updatePersona(persona, modelPath, true);
-      console.log(`VRM loaded successfully: ${persona} (${modelPath})`);
+      console.log(`VRM loaded successfully (#${thisToken}): ${persona} (${modelPath})`);
       onLoaded?.();
     },
     (progress: ProgressEvent) => {
       const percent = ((progress.loaded / progress.total) * 100).toFixed(1);
-      console.log(`Loading VRM: ${percent}%`);
+      console.log(`Loading VRM (#${thisToken}): ${percent}%`);
     },
     (error: unknown) => {
-      console.error("Error loading VRM:", error);
+      console.error(`Error loading VRM (#${thisToken}):`, error);
     }
   );
 }
@@ -701,25 +718,30 @@ function handlePersonaChange(nextPersonaStr: string) {
   const nextPersona = nextPersonaStr.toLowerCase() as PersonaId;
   if (!["eli", "rei", "sora", "rin"].includes(nextPersona)) return;
   const currentPersona = vrmController.persona;
-  if (currentPersona === nextPersona) return;
+  if (currentPersona === nextPersona && currentVRM !== null) return;
 
-  if (!shouldReloadModel(currentPersona, nextPersona)) {
-    // In-place persona switch without mesh reload from disk
-    vrmController.setPersona(nextPersona);
-    hud?.updatePersona(nextPersona, resolveModelPath(nextPersona), false);
-    console.log(`[Avatar] Persona updated in-place: ${currentPersona} -> ${nextPersona} (no mesh reload)`);
-  } else {
-    // 3D mesh reload required
-    vrmController.setPersona(nextPersona);
-    const newModelPath = resolveModelPath(nextPersona);
-    hud?.updatePersona(nextPersona, newModelPath, true);
-    console.log(`[Avatar] Reloading 3D VRM model for persona ${nextPersona}: ${newModelPath}`);
-    loadVRMModel(newModelPath, nextPersona);
-  }
+  vrmController.setPersona(nextPersona);
+  const newModelPath = resolveModelPath(nextPersona);
+  hud?.updatePersona(nextPersona, newModelPath, true);
+  console.log(`[Avatar] Loading 3D VRM model for persona ${nextPersona}: ${newModelPath}`);
+  loadVRMModel(newModelPath, nextPersona);
 }
 
-// Initial VRM model load
-loadVRMModel(MODEL_PATH, activePersona);
+// Coordinate initial VRM model load with active bridge persona
+function initModel() {
+  fetch("http://127.0.0.1:39420/state")
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      const targetPersona = (data?.persona?.toLowerCase() || activePersona) as PersonaId;
+      console.log(`[Avatar] Startup detected persona: ${targetPersona}`);
+      handlePersonaChange(targetPersona);
+    })
+    .catch(() => {
+      console.log(`[Avatar] Startup offline fallback persona: ${activePersona}`);
+      loadVRMModel(resolveModelPath(activePersona), activePersona);
+    });
+}
+initModel();
 
 // ============================================================================
 // CONFIGURASI ANIMASI IDLE LENGAN & TUBUH (KUUDERE CLINICAL AI)
