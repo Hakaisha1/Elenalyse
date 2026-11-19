@@ -157,7 +157,7 @@ renderer.toneMappingExposure = 1.0;
 const scene = new THREE.Scene();
 
 // Camera setup with dynamic look target (calibrated headroom)
-const cameraLookTarget = new THREE.Vector3(0, 1.16, 0);
+const cameraLookTarget = new THREE.Vector3(0, 1.20, 0);
 
 const camera = new THREE.PerspectiveCamera(
   26,
@@ -165,7 +165,7 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   30
 );
-camera.position.set(0, 1.16, 1.78);
+camera.position.set(0, 1.20, 1.18);
 camera.lookAt(cameraLookTarget);
 
 // Mouse wheel to zoom in / out smoothly or pan vertically with Shift/Alt
@@ -570,7 +570,7 @@ function frameCameraToModel(vrm: VRM) {
   const chestNode = vrm.humanoid?.getNormalizedBoneNode("chest") || vrm.humanoid?.getNormalizedBoneNode("spine");
 
   let headY = bbox.max.y - 0.12;
-  let chestY = 0.95;
+  let chestY = 1.02;
 
   if (headNode) {
     const headPos = new THREE.Vector3();
@@ -584,26 +584,26 @@ function frameCameraToModel(vrm: VRM) {
     chestY = chestPos.y;
   }
 
-  // Framing half-body portrait: from upper-waist/chest to top of head
+  // Framing halfbody headshot portrait: from upper-chest/armpits to top of head
   const topY = bbox.max.y;
-  const portraitCenterY = (headY + chestY) / 2 + 0.04;
-  const portraitHeight = Math.max(0.60, topY - (chestY - 0.25));
-  const portraitWidth = 0.52; // Shoulders + arms
+  const portraitCenterY = (headY + chestY) / 2 + 0.06;
+  const portraitHeight = Math.max(0.48, topY - (chestY - 0.10));
+  const portraitWidth = 0.40; // Shoulder-to-shoulder width
 
-  const margin = 1.16; // Headroom for ahoge
+  const margin = 1.08; // Headroom for ahoge & hair
   const halfFovRad = THREE.MathUtils.degToRad(camera.fov / 2);
 
   const distForHeight = ((portraitHeight * margin) / 2) / Math.tan(halfFovRad);
   const distForWidth = ((portraitWidth * margin) / 2) / (Math.tan(halfFovRad) * camera.aspect);
 
-  // Calibrated optimal distance for authentic desktop companion bust portrait (~1.70 - 1.85m)
-  const optimalDistance = THREE.MathUtils.clamp(Math.max(distForHeight, distForWidth), 1.65, 1.88);
+  // Calibrated optimal distance for true halfbody headshot portrait (~1.15 - 1.22m)
+  const optimalDistance = THREE.MathUtils.clamp(Math.max(distForHeight, distForWidth), 1.12, 1.24);
 
   cameraLookTarget.set(0, portraitCenterY, 0);
   camera.position.set(0, portraitCenterY, optimalDistance);
   camera.lookAt(cameraLookTarget);
 
-  console.log("Framed Half-Body VRM:", {
+  console.log("Framed Halfbody Headshot VRM:", {
     topY,
     portraitCenterY,
     portraitHeight,
@@ -1862,12 +1862,12 @@ function updateIdleAnimation(delta: number) {
 function toggleFaceFocus() {
   isFaceFocused = !isFaceFocused;
   if (isFaceFocused) {
-    userModelOffsetY = -0.12;
-    camera.position.z = 1.25;
+    userModelOffsetY = -0.06;
+    camera.position.z = 0.95;
     userModelRotationY = 0;
   } else {
     userModelOffsetY = 0;
-    camera.position.z = 1.78;
+    camera.position.z = 1.18;
     userModelRotationY = 0;
   }
   hud?.updateFaceFocus(isFaceFocused);
@@ -1876,8 +1876,8 @@ function toggleFaceFocus() {
 function resetView() {
   userModelOffsetY = 0;
   userModelRotationY = 0;
-  camera.position.z = 1.78;
-  cameraLookTarget.set(0, 1.16, 0);
+  camera.position.z = 1.18;
+  cameraLookTarget.set(0, 1.20, 0);
   isFaceFocused = false;
   hud?.updateFaceFocus(false);
 }
