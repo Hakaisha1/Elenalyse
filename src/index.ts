@@ -4,7 +4,12 @@ import { handleChat, startInteractiveChat, MemoryMode, MEMORY_LIMITS, trimMemory
 import { setConfig, Provider, Config } from "./config.js";
 import { Persona, personas } from "./personas.js";
 import { startBridgeServer } from "./bridge.js";
-import { syncAvatarPersona } from "./avatar/index.js";
+import {
+  syncAvatarPersona,
+  launchDesktopCompanion,
+  stopDesktopCompanion,
+  renderLiveStatusBox,
+} from "./avatar/index.js";
 
 // Non-blocking bridge server startup for live desktop overlay connection
 startBridgeServer().catch(() => {});
@@ -55,6 +60,65 @@ program
     } else {
       await startInteractiveChat(options.voice, options.debug, memoryMode);
     }
+  });
+
+program
+  .command("live [action]")
+  .description("Launch or manage 3D Reactive Avatar companion (ELI/REI VRM)")
+  .option("-v, --voice", "Enable TTS voice response")
+  .option("-d, --debug", "Show hidden voice tags in CLI for debugging")
+  .option("--amnesia", "Trim memory to 10 messages for low-token models")
+  .option("--focus", "Allow up to 100 messages for extended context")
+  .option("--mode <mode>", "Launch mode (dev or tauri)", "dev")
+  .action(async (action?: string, options?: any) => {
+    const act = action?.toLowerCase();
+
+    if (act === "status") {
+      console.log("\n" + renderLiveStatusBox() + "\n");
+      return;
+    }
+
+    if (act === "off") {
+      const stopped = stopDesktopCompanion();
+      if (stopped) {
+        console.log(chalk.yellow("[Live] Stopped 3D desktop companion background process."));
+      } else {
+        console.log(chalk.gray("[Live] No background 3D desktop companion process is currently tracked."));
+      }
+      return;
+    }
+
+    if (act === "eli") {
+      setConfig({ activePersona: "eli" });
+      syncAvatarPersona("eli");
+      console.log(chalk.green("[Live] Switched 3D avatar model to ELI (ELI_Model.vrm)"));
+      launchDesktopCompanion({ persona: "eli", mode: options?.mode });
+    } else if (act === "rei") {
+      setConfig({ activePersona: "rei" });
+      syncAvatarPersona("rei");
+      console.log(chalk.green("[Live] Switched 3D avatar model to REI (REI_Model.vrm)"));
+      launchDesktopCompanion({ persona: "rei", mode: options?.mode });
+    } else if (!act || act === "launch" || act === "on") {
+      const launchResult = launchDesktopCompanion({ mode: options?.mode });
+      if (launchResult.spawned) {
+        console.log(chalk.green(`[Live] ${launchResult.message}${launchResult.pid ? ` (PID: ${launchResult.pid})` : ""}`));
+      } else {
+        console.log(chalk.gray(`[Live] ${launchResult.message}`));
+      }
+    } else {
+      console.log(chalk.red(`Error: Unknown live action '${action}'. Available: status, eli, rei, launch, off.`));
+      process.exit(1);
+    }
+
+    console.log("\n" + renderLiveStatusBox() + "\n");
+
+    let memoryMode: MemoryMode = "default";
+    if (options?.amnesia) {
+      memoryMode = "amnesia";
+    } else if (options?.focus) {
+      memoryMode = "focus";
+    }
+    await startInteractiveChat(options?.voice, options?.debug, memoryMode);
   });
 
 const personaCmd = program

@@ -24,7 +24,14 @@ import { renderTokenWarningBox, runPartyOrchestration } from "./party.js";
 export { renderWelcomeBanner, printWelcomeBanner, renderSettingsBox, interactivePrompt, renderMarkdown, pruneMemoryToolResults, renderTokenWarningBox, runPartyOrchestration };
 import { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall } from "./toolParser.js";
 export { extractTextToolCalls, stripToolCallTags, canonicalToolName, normalizeToolArgs, ParsedToolCall };
-import { emitAvatarState, syncAvatarPersona } from "./avatar/index.js";
+import {
+  emitAvatarState,
+  syncAvatarPersona,
+  launchDesktopCompanion,
+  stopDesktopCompanion,
+  renderLiveStatusBox,
+  getLiveStatusSummary,
+} from "./avatar/index.js";
 
 export const MAX_AUTONOMOUS_STEPS = 25;
 
@@ -732,6 +739,7 @@ export async function startInteractiveChat(
       console.log(chalk.cyan("  /api <prov> <key>    : Save API Key (e.g., /api google AIza...)"));
       console.log(chalk.cyan("  /fix [blockers|..]   : Automatically execute fixes for audit issues"));
       console.log(chalk.cyan("  /party [audit|..]    : Orchestrate all 4 personas simultaneously (Token Intensive)"));
+      console.log(chalk.cyan("  /live [on|off|..]    : Launch or manage 3D Reactive Avatar companion (ELI/REI)"));
       console.log(chalk.cyan("  /undo                : Undo last file write or edit"));
       console.log(chalk.cyan("  /paste               : Enter multi-line paste mode (end with 'END')"));
       console.log(chalk.cyan("  /retry               : Retry the last prompt"));
@@ -940,6 +948,61 @@ export async function startInteractiveChat(
       } finally {
         rl.resume();
       }
+      continue;
+    }
+
+    if (input.startsWith("/live")) {
+      const parts = input.trim().split(/\s+/);
+      const subCommand = parts[1]?.toLowerCase();
+
+      if (subCommand === "eli") {
+        activePersona = "eli";
+        config.activePersona = "eli";
+        setConfig({ activePersona: "eli" });
+        syncAvatarPersona("eli");
+        emitAvatarState("idle", { detail: "live_model_switch", persona: "eli" });
+        console.log(chalk.green(`[Live] Switched 3D avatar model to ELI (ELI_Model.vrm)`));
+        continue;
+      }
+
+      if (subCommand === "rei") {
+        activePersona = "rei";
+        config.activePersona = "rei";
+        setConfig({ activePersona: "rei" });
+        syncAvatarPersona("rei");
+        emitAvatarState("idle", { detail: "live_model_switch", persona: "rei" });
+        console.log(chalk.green(`[Live] Switched 3D avatar model to REI (REI_Model.vrm)`));
+        continue;
+      }
+
+      if (subCommand === "status") {
+        console.log("\n" + renderLiveStatusBox() + "\n");
+        continue;
+      }
+
+      if (subCommand === "off") {
+        const stopped = stopDesktopCompanion();
+        if (stopped) {
+          console.log(chalk.yellow(`[Live] Stopped 3D desktop companion background process.`));
+        } else {
+          console.log(chalk.gray(`[Live] No background 3D desktop companion process is currently tracked.`));
+        }
+        continue;
+      }
+
+      if (!subCommand || subCommand === "on" || subCommand === "launch") {
+        await startBridgeServer().catch(() => {});
+        const launchResult = launchDesktopCompanion({ persona: activePersona });
+        if (launchResult.spawned) {
+          console.log(chalk.green(`[Live] ${launchResult.message}${launchResult.pid ? ` (PID: ${launchResult.pid})` : ""}`));
+        } else {
+          console.log(chalk.gray(`[Live] ${launchResult.message}`));
+        }
+        console.log("\n" + renderLiveStatusBox() + "\n");
+        continue;
+      }
+
+      console.log(chalk.red(`[Live] Unknown subcommand '${subCommand}'! Use: /live [on|off|status|eli|rei|launch]`));
       continue;
     }
 

@@ -86,6 +86,11 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: "Orchestrate all 4 personas simultaneously under ELI's coordination (Token Intensive)",
   },
   {
+    command: "/live",
+    syntax: "/live [on|off|status|eli|rei|launch]",
+    description: "Launch or manage 3D Reactive Avatar companion (ELI/REI VRM)",
+  },
+  {
     command: "/exit",
     syntax: "/exit",
     description: "Exit the application",
@@ -131,6 +136,45 @@ export const PARTY_SUBCOMMANDS: SuggestionItem[] = [
     label: "brainstorm",
     command: "brainstorm",
     description: "Brainstorm architecture, features, and risk analysis",
+  },
+];
+
+export const LIVE_SUBCOMMANDS: SuggestionItem[] = [
+  {
+    value: "on",
+    label: "on",
+    command: "on",
+    description: "Launch 3D Reactive Avatar companion window",
+  },
+  {
+    value: "launch",
+    label: "launch",
+    command: "launch",
+    description: "Launch 3D Reactive Avatar companion in background",
+  },
+  {
+    value: "eli",
+    label: "eli",
+    command: "eli",
+    description: "Switch 3D model to ELI (ELI_Model.vrm)",
+  },
+  {
+    value: "rei",
+    label: "rei",
+    command: "rei",
+    description: "Switch 3D model to REI (REI_Model.vrm)",
+  },
+  {
+    value: "status",
+    label: "status",
+    command: "status",
+    description: "Show live 3D bridge connection and model status",
+  },
+  {
+    value: "off",
+    label: "off",
+    command: "off",
+    description: "Stop background 3D companion process",
   },
 ];
 
@@ -415,6 +459,7 @@ const ALL_COMMAND_NAMES = new Set([
   "/session",
   "/fix",
   "/party",
+  "/live",
   "/paste",
   "/retry",
   "/clear",
@@ -490,6 +535,18 @@ export function getContextualSuggestions(
       ? PARTY_SUBCOMMANDS.filter((p) => p.value.toLowerCase().startsWith(query))
       : [...PARTY_SUBCOMMANDS];
     return { title: "Party Task", items };
+  }
+
+  // Level 2: /live [on|off|status|eli|rei|launch]
+  if (baseCmd === "/live") {
+    if (parts.length > 2 || (parts.length === 2 && endsWithSpace)) {
+      return { title: "3D Live Avatar Companion", items: [] };
+    }
+    const query = parts.length === 2 && !endsWithSpace ? parts[1].toLowerCase() : "";
+    const items = query
+      ? LIVE_SUBCOMMANDS.filter((s) => s.value.toLowerCase().startsWith(query))
+      : [...LIVE_SUBCOMMANDS];
+    return { title: "3D Live Avatar Companion", items };
   }
 
   // Level 2 & 3: /setting [memory|steps|voice|show]
