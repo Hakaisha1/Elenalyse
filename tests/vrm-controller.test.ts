@@ -146,10 +146,12 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
     it("resets neck and upperChest to default in idle state", () => {
       controller.transitionTo("thinking");
       controller.update(0.25);
+      controller.update(0.5);
       expect(mockBones.neck.rotation.z).toBeGreaterThan(0);
 
       controller.transitionTo("idle");
-      controller.update(0.25);
+      controller.update(0.25); // Complete crossfade
+      controller.update(0.8);  // Allow physical exponential damping to settle
       expect(mockBones.neck.rotation.z).toBeCloseTo(0, 2);
       expect(mockBones.upperChest.rotation.z).toBeCloseTo(0, 2);
     });
@@ -211,7 +213,71 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
     });
   });
 
-  // 4. VRM Attachment and Persona Updates
+  // 4. Organic Staggered Damping & Dynamic Motion Polish
+  describe("Organic Staggered Damping & Dynamic Motion Polish", () => {
+    it("exposes dampedValues and dampens bone trajectories monotonically without NaN or overshoot", () => {
+      controller.update(0.016);
+      expect(controller.dampedValues).not.toBeNull();
+
+      controller.transitionTo("thinking");
+      let prevHeadZ = controller.dampedValues!.head.z;
+
+      for (let i = 0; i < 30; i++) {
+        controller.update(0.016);
+        const currentHeadZ = controller.dampedValues!.head.z;
+        expect(Number.isFinite(currentHeadZ)).toBe(true);
+        expect(Number.isNaN(currentHeadZ)).toBe(false);
+        // During initial rise to Phase A (head.z target ~0.14), value should monotonically advance
+        expect(currentHeadZ).toBeGreaterThanOrEqual(prevHeadZ - 0.001);
+        prevHeadZ = currentHeadZ;
+      }
+    });
+
+    it("smoothly modulates thinking choreography across Phase A, Phase B, and Phase C", () => {
+      controller.transitionTo("thinking");
+
+      // Phase A: ~0.0s - 3.5s (Right-Up Ponder)
+      controller.update(0.5);
+      const phaseAHeadZ = controller.dampedValues!.head.z;
+      const phaseAHeadX = controller.dampedValues!.head.x;
+      const phaseANeckZ = controller.dampedValues!.neck.z;
+      expect(phaseAHeadZ).toBeGreaterThan(0.05); // Positive right lateral tilt
+      expect(phaseANeckZ).toBeGreaterThan(0.02);
+      expect(phaseAHeadX).toBeLessThan(0); // Looking upward slightly
+
+      // Phase B: ~3.5s - 7.0s (Center-Down Mulling)
+      controller.update(3.2); // Now at ~3.7s
+      const phaseBHeadZ = controller.dampedValues!.head.z;
+      const phaseBHeadX = controller.dampedValues!.head.x;
+      expect(phaseBHeadZ).toBeLessThan(phaseAHeadZ); // Lateral tilt reduces towards center
+      expect(phaseBHeadX).toBeGreaterThan(phaseAHeadX); // Pitch shifts forward/down
+
+      // Phase C: ~7.0s - 10.5s (Left-Up Re-evaluate)
+      controller.update(3.5); // Now at ~7.2s
+      const phaseCHeadZ = controller.dampedValues!.head.z;
+      const phaseCNeckZ = controller.dampedValues!.neck.z;
+      expect(phaseCHeadZ).toBeLessThan(0); // Tilts left (negative z)
+      expect(phaseCNeckZ).toBeLessThan(0);
+
+      // Verify all rotations remain strictly bounded within safe ergonomic limits
+      for (const z of [phaseAHeadZ, phaseBHeadZ, phaseCHeadZ]) {
+        expect(Math.abs(z)).toBeLessThan(0.25);
+      }
+    });
+
+    it("settles rapid error preemption with higher damping decay rate", () => {
+      controller.transitionTo("error");
+      // Advance by crossfade duration (0.15s) plus short settling (0.15s) = 0.3s
+      controller.update(0.15);
+      controller.update(0.15);
+
+      const damped = controller.dampedValues!;
+      expect(damped.expressions.surprised).toBeGreaterThanOrEqual(0.60);
+      expect(damped.head.x).toBeLessThan(-0.04); // Rapid startled pullback settled
+    });
+  });
+
+  // 5. VRM Attachment and Persona Updates
   describe("Controller State Management", () => {
     it("handles null VRM gracefully without throwing", () => {
       const nullController = new ReactiveVRMController(null);

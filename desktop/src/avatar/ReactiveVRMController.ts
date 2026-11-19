@@ -75,6 +75,59 @@ export interface ControllerOptions {
 }
 
 /**
+ * Frame-rate-independent exponential damping.
+ * damp(current, target, lambda, dt) = target + (current - target) * Math.exp(-lambda * dt)
+ */
+export function damp(
+  current: number,
+  target: number,
+  lambda: number,
+  dt: number
+): number {
+  return target + (current - target) * Math.exp(-lambda * dt);
+}
+
+export interface ThinkingSubPose {
+  neck: MockRotation;
+  head: MockRotation;
+  upperChest: MockRotation;
+  chest: MockRotation;
+  spine: MockRotation;
+  rightUpperArm: MockRotation;
+  rightLowerArm: MockRotation;
+}
+
+export const THINKING_PHASE_A: ThinkingSubPose = {
+  neck: { x: -0.04, y: 0.05, z: 0.07 },
+  head: { x: -0.06, y: 0.08, z: 0.14 },
+  upperChest: { x: 0.01, y: 0.04, z: -0.03 },
+  chest: { x: 0.01, y: 0.02, z: -0.015 },
+  spine: { x: 0.01, y: 0, z: 0 },
+  rightUpperArm: { x: 0.06, y: 0.12, z: 1.15 },
+  rightLowerArm: { x: 0.38, y: 0.28, z: 0.06 },
+};
+
+export const THINKING_PHASE_B: ThinkingSubPose = {
+  neck: { x: -0.01, y: -0.02, z: 0.02 },
+  head: { x: 0.02, y: -0.03, z: 0.04 },
+  upperChest: { x: 0.01, y: -0.02, z: 0.01 },
+  chest: { x: 0.015, y: -0.01, z: 0.005 },
+  spine: { x: 0.02, y: 0, z: 0 },
+  rightUpperArm: { x: 0.04, y: 0.08, z: 1.18 },
+  rightLowerArm: { x: 0.30, y: 0.22, z: 0.04 },
+};
+
+export const THINKING_PHASE_C: ThinkingSubPose = {
+  neck: { x: -0.03, y: -0.04, z: -0.04 },
+  head: { x: -0.04, y: -0.06, z: -0.06 },
+  upperChest: { x: 0.01, y: -0.03, z: 0.02 },
+  chest: { x: 0.01, y: -0.015, z: 0.01 },
+  spine: { x: 0.01, y: 0, z: 0 },
+  rightUpperArm: { x: 0.03, y: 0.06, z: 1.20 },
+  rightLowerArm: { x: 0.26, y: 0.18, z: 0.02 },
+};
+
+/**
  * Smoothstep easing function for natural animation crossfading.
  */
 function smoothstep(min: number, max: number, value: number): number {
@@ -91,6 +144,7 @@ export class ReactiveVRMController {
   private _currentState: AvatarInteractionState = "idle";
   private _previousState: AvatarInteractionState | null = null;
   private _persona: PersonaId = "eli";
+  private _dampedValues: PoseStateValues | null = null;
 
   // Transition & Crossfade timing
   private _transitionProgress = 1.0; // 0.0 to 1.0
@@ -118,6 +172,10 @@ export class ReactiveVRMController {
 
   public get persona(): PersonaId {
     return this._persona;
+  }
+
+  public get dampedValues(): PoseStateValues | null {
+    return this._dampedValues;
   }
 
   public get transitionProgress(): number {
@@ -190,8 +248,6 @@ export class ReactiveVRMController {
     // Update periodic blink in idle
     this._updateBlink(dt);
 
-    if (!this._vrm) return;
-
     // Compute pose & expressions for current state
     const currentValues = this._evaluateState(
       this._currentState,
@@ -213,8 +269,136 @@ export class ReactiveVRMController {
       finalValues = currentValues;
     }
 
-    // Apply to VRM bones and expressions
-    this._applyPoseValues(finalValues);
+    // Staggered exponential bone damping pass
+    if (!this._dampedValues) {
+      this._dampedValues = this._clonePoseValues(finalValues);
+    } else {
+      const lambdaHead = this._currentState === "error" ? 8.5 : 4.5;
+      const lambdaNeck = this._currentState === "error" ? 8.5 : 4.5;
+      const lambdaTorso = 3.0;
+      const lambdaArms = 3.0;
+      const lambdaExpressions = this._currentState === "error" ? 10.0 : 5.0;
+
+      // Damp Head & Neck
+      this._dampRotation(this._dampedValues.head, finalValues.head, lambdaHead, dt);
+      this._dampRotation(this._dampedValues.neck, finalValues.neck, lambdaNeck, dt);
+
+      // Damp Torso (Spine, Chest, UpperChest)
+      this._dampRotation(this._dampedValues.spine, finalValues.spine, lambdaTorso, dt);
+      this._dampRotation(this._dampedValues.chest, finalValues.chest, lambdaTorso, dt);
+      this._dampRotation(this._dampedValues.upperChest, finalValues.upperChest, lambdaTorso, dt);
+
+      // Damp Arms
+      this._dampRotation(this._dampedValues.leftUpperArm, finalValues.leftUpperArm, lambdaArms, dt);
+      this._dampRotation(this._dampedValues.rightUpperArm, finalValues.rightUpperArm, lambdaArms, dt);
+      this._dampRotation(this._dampedValues.leftLowerArm, finalValues.leftLowerArm, lambdaArms, dt);
+      this._dampRotation(this._dampedValues.rightLowerArm, finalValues.rightLowerArm, lambdaArms, dt);
+
+      // Damp Expressions
+      const allExprKeys = new Set([
+        ...Object.keys(this._dampedValues.expressions),
+        ...Object.keys(finalValues.expressions),
+      ]);
+      for (const key of allExprKeys) {
+        const curr = this._dampedValues.expressions[key] ?? 0;
+        const target = finalValues.expressions[key] ?? 0;
+        this._dampedValues.expressions[key] = damp(curr, target, lambdaExpressions, dt);
+      }
+    }
+
+    if (!this._vrm) return;
+
+    // Apply damped values to VRM bones and expressions
+    this._applyPoseValues(this._dampedValues);
+  }
+
+  private _dampRotation(
+    current: MockRotation,
+    target: MockRotation,
+    lambda: number,
+    dt: number
+  ): void {
+    current.x = damp(current.x, target.x, lambda, dt);
+    current.y = damp(current.y, target.y, lambda, dt);
+    current.z = damp(current.z, target.z, lambda, dt);
+  }
+
+  private _clonePoseValues(src: PoseStateValues): PoseStateValues {
+    return {
+      head: { ...src.head },
+      neck: { ...src.neck },
+      spine: { ...src.spine },
+      chest: { ...src.chest },
+      upperChest: { ...src.upperChest },
+      leftUpperArm: { ...src.leftUpperArm },
+      rightUpperArm: { ...src.rightUpperArm },
+      leftLowerArm: { ...src.leftLowerArm },
+      rightLowerArm: { ...src.rightLowerArm },
+      expressions: { ...src.expressions },
+    };
+  }
+
+  private _evaluateThinkingChoreography(
+    stateTime: number,
+    globalTime: number
+  ): ThinkingSubPose {
+    const cycleDuration = 10.5;
+    const phaseDuration = 3.5;
+    const cycleTime =
+      ((stateTime % cycleDuration) + cycleDuration) % cycleDuration;
+    const phaseIndex = Math.floor(cycleTime / phaseDuration);
+    const phaseProgress = (cycleTime % phaseDuration) / phaseDuration;
+    const t = smoothstep(0, 1, phaseProgress);
+
+    const lerpRot = (
+      a: MockRotation,
+      b: MockRotation,
+      factor: number
+    ): MockRotation => ({
+      x: a.x + (b.x - a.x) * factor,
+      y: a.y + (b.y - a.y) * factor,
+      z: a.z + (b.z - a.z) * factor,
+    });
+
+    let fromPose: ThinkingSubPose;
+    let toPose: ThinkingSubPose;
+
+    if (phaseIndex === 0) {
+      fromPose = THINKING_PHASE_A;
+      toPose = THINKING_PHASE_B;
+    } else if (phaseIndex === 1) {
+      fromPose = THINKING_PHASE_B;
+      toPose = THINKING_PHASE_C;
+    } else {
+      fromPose = THINKING_PHASE_C;
+      toPose = THINKING_PHASE_A;
+    }
+
+    const neck = lerpRot(fromPose.neck, toPose.neck, t);
+    const head = lerpRot(fromPose.head, toPose.head, t);
+    const upperChest = lerpRot(fromPose.upperChest, toPose.upperChest, t);
+    const chest = lerpRot(fromPose.chest, toPose.chest, t);
+    const spine = lerpRot(fromPose.spine, toPose.spine, t);
+    const rightUpperArm = lerpRot(fromPose.rightUpperArm, toPose.rightUpperArm, t);
+    const rightLowerArm = lerpRot(fromPose.rightLowerArm, toPose.rightLowerArm, t);
+
+    // Continuous calm breathing layer (0.35–0.45 rad/s frequency)
+    const calmBreath = Math.sin(globalTime * 0.40 * Math.PI * 2) * 0.008;
+    chest.x += calmBreath;
+    spine.x += calmBreath * 0.7;
+
+    // Subtle sway micro-motion
+    head.z += Math.sin(globalTime * 1.0) * 0.015;
+
+    return {
+      neck,
+      head,
+      upperChest,
+      chest,
+      spine,
+      rightUpperArm,
+      rightLowerArm,
+    };
   }
 
   private _updateBlink(dt: number): void {
@@ -276,36 +460,36 @@ export class ReactiveVRMController {
       }
 
       case "thinking": {
-        // Distributed Head + Neck Tilt (Total ~11°–14° lateral tilt + contemplative gaze)
-        neck.x = -0.04;
-        neck.y = 0.05;
-        neck.z = 0.07;
+        // Dynamic ~10.5s cyclic contemplative choreography across Phase A, B, and C
+        const choreo = this._evaluateThinkingChoreography(stateTime, globalTime);
 
-        head.x = -0.06;
-        head.y = 0.08;
-        head.z = 0.14 + Math.sin(globalTime * 1.0) * 0.02;
+        neck.x = choreo.neck.x;
+        neck.y = choreo.neck.y;
+        neck.z = choreo.neck.z;
 
-        // Upper-Body Asymmetry
-        upperChest.x = 0.01;
-        upperChest.y = 0.04;
-        upperChest.z = -0.03;
+        head.x = choreo.head.x;
+        head.y = choreo.head.y;
+        head.z = choreo.head.z;
 
-        chest.x = 0.01;
-        chest.y = 0.02;
-        chest.z = -0.015;
+        upperChest.x = choreo.upperChest.x;
+        upperChest.y = choreo.upperChest.y;
+        upperChest.z = choreo.upperChest.z;
 
-        spine.x = 0.01;
-        spine.y = 0;
-        spine.z = 0;
+        chest.x = choreo.chest.x;
+        chest.y = choreo.chest.y;
+        chest.z = choreo.chest.z;
 
-        // Contemplative Arm Accent
-        rightUpperArm.x = 0.06;
-        rightUpperArm.y = 0.12;
-        rightUpperArm.z = 1.15;
+        spine.x = choreo.spine.x;
+        spine.y = choreo.spine.y;
+        spine.z = choreo.spine.z;
 
-        rightLowerArm.x = 0.38;
-        rightLowerArm.y = 0.28;
-        rightLowerArm.z = 0.06;
+        rightUpperArm.x = choreo.rightUpperArm.x;
+        rightUpperArm.y = choreo.rightUpperArm.y;
+        rightUpperArm.z = choreo.rightUpperArm.z;
+
+        rightLowerArm.x = choreo.rightLowerArm.x;
+        rightLowerArm.y = choreo.rightLowerArm.y;
+        rightLowerArm.z = choreo.rightLowerArm.z;
 
         leftUpperArm.x = 0.02;
         leftUpperArm.y = -0.06;

@@ -333,6 +333,10 @@ export class DiagnosticHUD {
     this._modelEl = document.createElement("span");
     this._modelEl.style.color = "#94a3b8";
     this._modelEl.style.fontSize = "9px";
+    this._modelEl.style.maxWidth = "90px";
+    this._modelEl.style.overflow = "hidden";
+    this._modelEl.style.textOverflow = "ellipsis";
+    this._modelEl.style.whiteSpace = "nowrap";
     this._modelEl.textContent = "ELI_Model.vrm";
 
     leftCluster.appendChild(title);
@@ -347,8 +351,14 @@ export class DiagnosticHUD {
     rightCluster.style.gap = "6px";
 
     this._crossfadeEl = document.createElement("span");
+    this._crossfadeEl.style.marginLeft = "6px";
+    this._crossfadeEl.style.padding = "1px 5px";
+    this._crossfadeEl.style.background = "rgba(51, 65, 85, 0.7)";
+    this._crossfadeEl.style.borderRadius = "3px";
+    this._crossfadeEl.style.borderLeft = "1px solid rgba(255, 255, 255, 0.2)";
     this._crossfadeEl.style.color = "#94a3b8";
     this._crossfadeEl.style.fontSize = "9px";
+    this._crossfadeEl.style.whiteSpace = "nowrap";
     this._crossfadeEl.textContent = "250ms";
 
     this._detailEl = document.createElement("span");
