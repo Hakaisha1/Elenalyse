@@ -27,6 +27,12 @@ export class DiagnosticHUD {
   private _bridgeOnline = false;
   private _onAction: ActionCallback | null = null;
 
+  // View state controls
+  private _isFaceFocused = false;
+  private _dragMode: "avatar" | "window" = "avatar";
+  private _faceFocusBtn!: HTMLButtonElement;
+  private _dragModeBtn!: HTMLButtonElement;
+
   // DOM telemetry elements
   private _bridgeStatusEl!: HTMLSpanElement;
   private _stateBadgeEl!: HTMLSpanElement;
@@ -82,7 +88,7 @@ export class DiagnosticHUD {
     this._panel.style.left = "0";
     this._panel.style.right = "0";
     this._panel.style.width = "100%";
-    this._panel.style.height = "120px";
+    this._panel.style.height = "128px";
     this._panel.style.boxSizing = "border-box";
     this._panel.style.background = "rgba(15, 23, 42, 0.85)";
     this._panel.style.borderTop = "1px solid rgba(255, 255, 255, 0.18)";
@@ -102,7 +108,7 @@ export class DiagnosticHUD {
     this._root.appendChild(this._panel);
     document.body.appendChild(this._root);
 
-    // Global toggle keybinding ('D' or 'd') & Rapid Simulation Hotkeys (1-7, R)
+    // Global toggle keybinding ('D' or 'd') & Rapid Simulation / View Hotkeys (1-7, R, F)
     window.addEventListener("keydown", (e) => {
       const activeEl = document.activeElement;
       if (
@@ -127,6 +133,8 @@ export class DiagnosticHUD {
         "7": "BB-07",
         r: "RESET",
         R: "RESET",
+        f: "FOCUS_FACE",
+        F: "FOCUS_FACE",
       };
 
       if (hotkeyMap[e.key]) {
@@ -144,6 +152,31 @@ export class DiagnosticHUD {
 
   public get isBridgeOnline(): boolean {
     return this._bridgeOnline;
+  }
+
+  public get isFaceFocused(): boolean {
+    return this._isFaceFocused;
+  }
+
+  public get dragMode(): "avatar" | "window" {
+    return this._dragMode;
+  }
+
+  public updateFaceFocus(focused: boolean): void {
+    this._isFaceFocused = focused;
+    if (this._faceFocusBtn) {
+      this._faceFocusBtn.textContent = focused ? "[F] BODY" : "[F] FACE";
+      this._faceFocusBtn.style.color = focused ? "#38bdf8" : "#f1f5f9";
+      this._faceFocusBtn.style.borderColor = focused ? "#38bdf8" : "rgba(255, 255, 255, 0.15)";
+    }
+  }
+
+  public updateDragMode(mode: "avatar" | "window"): void {
+    this._dragMode = mode;
+    if (this._dragModeBtn) {
+      this._dragModeBtn.textContent = mode === "avatar" ? "🖱️ AVATAR" : "🪟 WINDOW";
+      this._dragModeBtn.style.color = mode === "avatar" ? "#4ade80" : "#fbbf24";
+    }
   }
 
   public toggle(): void {
@@ -406,15 +439,22 @@ export class DiagnosticHUD {
 
     this._panel.appendChild(btnGrid);
 
-    // Section 2: Persona Swapping Controls
+    // Section 2: Persona Swapping & View Control Rows
+    const controlsContainer = document.createElement("div");
+    controlsContainer.style.display = "flex";
+    controlsContainer.style.flexDirection = "column";
+    controlsContainer.style.gap = "2px";
+
+    // Sub-row 1: Persona Swapping
     const personaRow = document.createElement("div");
     personaRow.style.display = "flex";
-    personaRow.style.gap = "4px";
+    personaRow.style.gap = "3px";
     personaRow.style.alignItems = "center";
 
     const personaLabel = document.createElement("span");
     personaLabel.style.color = "#64748b";
     personaLabel.style.fontSize = "8px";
+    personaLabel.style.width = "48px";
     personaLabel.style.letterSpacing = "0.5px";
     personaLabel.textContent = "PERSONA:";
     personaRow.appendChild(personaLabel);
@@ -427,8 +467,8 @@ export class DiagnosticHUD {
       b.style.border = "1px solid rgba(255, 255, 255, 0.15)";
       b.style.borderRadius = "3px";
       b.style.color = "#f1f5f9";
-      b.style.fontSize = "9px";
-      b.style.padding = "2px 0";
+      b.style.fontSize = "8px";
+      b.style.padding = "1px 0";
       b.style.cursor = "pointer";
       b.setAttribute("data-tauri-drag-region", "false");
       b.addEventListener("mouseenter", () => {
@@ -447,8 +487,76 @@ export class DiagnosticHUD {
     personaRow.appendChild(makePersonaBtn("rei"));
     personaRow.appendChild(makePersonaBtn("sora"));
     personaRow.appendChild(makePersonaBtn("rin"));
+    controlsContainer.appendChild(personaRow);
 
-    this._panel.appendChild(personaRow);
+    // Sub-row 2: View Controls (Face Focus, Reset View, Drag Mode Toggle)
+    const viewRow = document.createElement("div");
+    viewRow.style.display = "flex";
+    viewRow.style.gap = "3px";
+    viewRow.style.alignItems = "center";
+
+    const viewLabel = document.createElement("span");
+    viewLabel.style.color = "#64748b";
+    viewLabel.style.fontSize = "8px";
+    viewLabel.style.width = "48px";
+    viewLabel.style.letterSpacing = "0.5px";
+    viewLabel.textContent = "VIEW:";
+    viewRow.appendChild(viewLabel);
+
+    const makeViewBtn = (
+      text: string,
+      title: string,
+      onClick: () => void
+    ): HTMLButtonElement => {
+      const b = document.createElement("button");
+      b.textContent = text;
+      b.title = title;
+      b.style.flex = "1";
+      b.style.background = "rgba(30, 41, 59, 0.85)";
+      b.style.border = "1px solid rgba(255, 255, 255, 0.15)";
+      b.style.borderRadius = "3px";
+      b.style.color = "#f1f5f9";
+      b.style.fontSize = "8px";
+      b.style.padding = "1px 0";
+      b.style.cursor = "pointer";
+      b.style.whiteSpace = "nowrap";
+      b.setAttribute("data-tauri-drag-region", "false");
+      b.addEventListener("mouseenter", () => {
+        b.style.borderColor = "#38bdf8";
+      });
+      b.addEventListener("mouseleave", () => {
+        b.style.borderColor = "rgba(255, 255, 255, 0.15)";
+      });
+      b.addEventListener("click", onClick);
+      return b;
+    };
+
+    this._faceFocusBtn = makeViewBtn("[F] FACE", "[F] Toggle Face Focus & Close-up Framing", () => {
+      this._onAction?.("FOCUS_FACE");
+    });
+    const resetViewBtn = makeViewBtn("[↺] RESET", "Reset Model Pan (Y) & Rotation (360°)", () => {
+      this._onAction?.("RESET_VIEW");
+    });
+    this._dragModeBtn = makeViewBtn("🖱️ AVATAR", "Toggle Left-Click Drag: Pan Avatar vs Drag Window", () => {
+      this._onAction?.("TOGGLE_DRAG_MODE");
+    });
+
+    viewRow.appendChild(this._faceFocusBtn);
+    viewRow.appendChild(resetViewBtn);
+    viewRow.appendChild(this._dragModeBtn);
+    controlsContainer.appendChild(viewRow);
+
+    // Sub-row 3: Subtle helper hint
+    const hint = document.createElement("div");
+    hint.style.fontSize = "8px";
+    hint.style.color = "#64748b";
+    hint.style.textAlign = "center";
+    hint.style.marginTop = "1px";
+    hint.style.letterSpacing = "0.2px";
+    hint.textContent = "↕ Right-Click / Shift+Drag to Pan & Rotate | [F] Face Focus";
+    controlsContainer.appendChild(hint);
+
+    this._panel.appendChild(controlsContainer);
     this._refreshView();
   }
 }

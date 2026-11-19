@@ -12,15 +12,9 @@ import {
 import { DiagnosticHUD } from "./ui/DiagnosticHUD.js";
 
 // --- Tauri Window Dragging & Bottom-Left Positioning ---
+let appWindow: any = null;
 try {
-  const appWindow = getCurrentWindow();
-  
-  // Left-click dragging (only if not holding Shift/Alt for model rotate)
-  window.addEventListener("mousedown", (e) => {
-    if (e.button === 0 && !e.shiftKey && !e.altKey) {
-      appWindow.startDragging();
-    }
-  });
+  appWindow = getCurrentWindow();
 
   // Automatically ensure window is docked at bottom-left corner
   async function dockBottomLeft() {
@@ -46,48 +40,101 @@ try {
   console.debug("Tauri window API not available (browser preview mode):", err);
 }
 
-// --- 360° Debug Model Rotation Controls ---
-let isRotatingModel = false;
+// --- 3D Avatar Dragging, Vertical Panning, & 360° Rotation Controls ---
+let isDraggingModel = false;
 let prevMouseX = 0;
+let prevMouseY = 0;
 let userModelRotationY = 0;
+let userModelOffsetY = 0;
 let baseModelRotationY = 0;
+let isFaceFocused = false;
+let leftClickDragMode: "avatar" | "window" = "avatar";
 
-// Prevent right-click context menu so rotation is smooth
+// Prevent right-click context menu so rotation and panning are uninterrupted
 window.addEventListener("contextmenu", (e) => {
   e.preventDefault();
 });
 
 window.addEventListener("mousedown", (e) => {
-  // Rotate with Right-Click OR Shift + Left-Click
-  if (e.button === 2 || (e.button === 0 && (e.shiftKey || e.altKey))) {
-    isRotatingModel = true;
+  const target = e.target as HTMLElement | null;
+  // Ignore clicks on HUD interactive buttons/badges
+  if (target?.closest("#diagnostic-hud-root") || target?.tagName === "BUTTON") {
+    return;
+  }
+
+  const isRightClick = e.button === 2;
+  const isMiddleClick = e.button === 1;
+  const isModifiedLeftClick = e.button === 0 && (e.shiftKey || e.altKey || e.ctrlKey);
+  const isAvatarLeftClick = e.button === 0 && leftClickDragMode === "avatar";
+
+  if (isRightClick || isMiddleClick || isModifiedLeftClick || isAvatarLeftClick) {
+    isDraggingModel = true;
     prevMouseX = e.clientX;
+    prevMouseY = e.clientY;
+    document.body.style.cursor = "grabbing";
+    return;
+  }
+
+  // Left-click in window drag mode initiates Tauri window dragging
+  if (e.button === 0 && leftClickDragMode === "window") {
+    try {
+      appWindow?.startDragging();
+    } catch {}
   }
 });
 
 window.addEventListener("mousemove", (e) => {
-  if (isRotatingModel && currentVRM) {
+  if (isDraggingModel && currentVRM) {
     const deltaX = e.clientX - prevMouseX;
+    const deltaY = e.clientY - prevMouseY;
     prevMouseX = e.clientX;
-    // Rotate model around Y axis smoothly
+    prevMouseY = e.clientY;
+
+    // Horizontal drag: rotate model around Y axis
     userModelRotationY += deltaX * 0.018;
+
+    // Vertical drag: pan model along Y axis
+    // Dragging mouse down (deltaY > 0) pulls avatar down, centering the face in viewport
+    userModelOffsetY = THREE.MathUtils.clamp(
+      userModelOffsetY - deltaY * 0.0035,
+      -1.2,
+      0.8
+    );
   }
 });
 
-window.addEventListener("mouseup", (e) => {
-  if (e.button === 2 || e.button === 0) {
-    isRotatingModel = false;
+window.addEventListener("mouseup", () => {
+  if (isDraggingModel) {
+    isDraggingModel = false;
+    document.body.style.cursor = "default";
   }
 });
 
-// Reset rotation to front on Double-Click or Middle-Click
-window.addEventListener("dblclick", () => {
+window.addEventListener("mouseleave", () => {
+  if (isDraggingModel) {
+    isDraggingModel = false;
+    document.body.style.cursor = "default";
+  }
+});
+
+// Reset view on double-click or middle-click
+window.addEventListener("dblclick", (e) => {
+  const target = e.target as HTMLElement | null;
+  if (target?.closest("#diagnostic-hud-root") || target?.tagName === "BUTTON") {
+    return;
+  }
   userModelRotationY = 0;
+  userModelOffsetY = 0;
+  isFaceFocused = false;
+  hud?.updateFaceFocus(false);
 });
 
 window.addEventListener("auxclick", (e) => {
-  if (e.button === 1) { // Middle mouse click
+  if (e.button === 1) { // Middle click
     userModelRotationY = 0;
+    userModelOffsetY = 0;
+    isFaceFocused = false;
+    hud?.updateFaceFocus(false);
   }
 });
 
@@ -120,13 +167,19 @@ const camera = new THREE.PerspectiveCamera(
 camera.position.set(0, 0.85, 3.45);
 camera.lookAt(cameraLookTarget);
 
-// Mouse wheel to zoom in / out smoothly
+// Mouse wheel to zoom in / out smoothly or pan vertically with Shift/Alt
 window.addEventListener(
   "wheel",
   (e) => {
     e.preventDefault();
-    const zoomDelta = e.deltaY * 0.002;
-    camera.position.z = THREE.MathUtils.clamp(camera.position.z + zoomDelta, 0.8, 6.0);
+    if (e.shiftKey || e.altKey) {
+      // Holding Shift or Alt while scrolling mouse wheel pans userModelOffsetY vertically
+      const panDelta = e.deltaY * 0.0015;
+      userModelOffsetY = THREE.MathUtils.clamp(userModelOffsetY - panDelta, -1.2, 0.8);
+    } else {
+      const zoomDelta = e.deltaY * 0.002;
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z + zoomDelta, 0.8, 6.0);
+    }
   },
   { passive: false }
 );
@@ -156,7 +209,7 @@ window.addEventListener("mousemove", (e) => {
   const ndcX = (e.clientX / window.innerWidth) * 2 - 1;
   const ndcY = -(e.clientY / window.innerHeight) * 2 + 1;
   mousePos.x = ndcX * 0.45;
-  mousePos.y = cameraLookTarget.y + ndcY * 0.35;
+  mousePos.y = cameraLookTarget.y + userModelOffsetY + ndcY * 0.35;
 });
 
 window.addEventListener("mouseleave", () => {
@@ -1335,7 +1388,7 @@ function updateIdleAnimation(delta: number) {
   } else {
     // Batasan: Jangan pernah berpindah pose saat micro-action berjalan, saat glance/diagnostic aktif, atau saat user sedang berinteraksi
     const isBusy =
-      isMicroActionActive() || glanceState !== "idle" || diagnosticState !== "idle" || mouseInside || isRotatingModel;
+      isMicroActionActive() || glanceState !== "idle" || diagnosticState !== "idle" || mouseInside || isDraggingModel;
     if (!isBusy) {
       poseTimer += delta;
       if (poseTimer >= nextPoseChangeAt) {
@@ -1406,7 +1459,7 @@ function updateIdleAnimation(delta: number) {
   } else {
     // Schedule micro-action berikutnya jika tidak sedang sibuk
     const isBusy =
-      isPoseTransitioning || glanceState !== "idle" || diagnosticState !== "idle" || mouseInside || isRotatingModel;
+      isPoseTransitioning || glanceState !== "idle" || diagnosticState !== "idle" || mouseInside || isDraggingModel;
     if (!isBusy) {
       microActionTimer += delta;
       if (microActionTimer >= nextMicroActionAt) {
@@ -1726,7 +1779,7 @@ function updateIdleAnimation(delta: number) {
     lookAtTarget.position.y = damp(lookAtTarget.position.y, mousePos.y + currentSaccadeY + microLookAtY, 4.2, delta);
   } else {
     const forwardX = currentGlanceYaw * 0.6 + currentSaccadeX;
-    const forwardY = cameraLookTarget.y + 0.08 + currentSaccadeY + microLookAtY;
+    const forwardY = cameraLookTarget.y + userModelOffsetY + 0.08 + currentSaccadeY + microLookAtY;
     lookAtTarget.position.x = damp(lookAtTarget.position.x, forwardX, 2.5, delta);
     lookAtTarget.position.y = damp(lookAtTarget.position.y, forwardY, 2.5, delta);
   }
@@ -1762,6 +1815,38 @@ function updateIdleAnimation(delta: number) {
   currentVRM.update(delta);
 }
 
+// --- Face Focus & View Helpers ---
+function toggleFaceFocus() {
+  isFaceFocused = !isFaceFocused;
+  if (isFaceFocused) {
+    userModelOffsetY = -0.35;
+    camera.position.z = 2.45;
+    userModelRotationY = 0;
+  } else {
+    userModelOffsetY = 0;
+    camera.position.z = 3.45;
+    userModelRotationY = 0;
+  }
+  hud?.updateFaceFocus(isFaceFocused);
+}
+
+function resetView() {
+  userModelOffsetY = 0;
+  userModelRotationY = 0;
+  camera.position.z = 3.45;
+  isFaceFocused = false;
+  hud?.updateFaceFocus(false);
+}
+
+// Global hotkey for Face Focus toggle ('F' or 'f')
+window.addEventListener("keydown", (e) => {
+  const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+  if (targetTag === "input" || targetTag === "textarea") return;
+  if (e.key === "f" || e.key === "F") {
+    toggleFaceFocus();
+  }
+});
+
 // --- Render Loop ---
 function animate() {
   requestAnimationFrame(animate);
@@ -1770,6 +1855,7 @@ function animate() {
   vrmController.update(delta);
   hud?.update(delta);
   if (currentVRM) {
+    currentVRM.scene.position.y = userModelOffsetY;
     currentVRM.scene.rotation.y = baseModelRotationY + userModelRotationY;
   }
   camera.lookAt(cameraLookTarget);
@@ -1853,6 +1939,16 @@ hud = new DiagnosticHUD((action, payload) => {
       if (payload) {
         handlePersonaChange(payload as string);
       }
+      break;
+    case "FOCUS_FACE":
+      toggleFaceFocus();
+      break;
+    case "RESET_VIEW":
+      resetView();
+      break;
+    case "TOGGLE_DRAG_MODE":
+      leftClickDragMode = leftClickDragMode === "avatar" ? "window" : "avatar";
+      hud?.updateDragMode(leftClickDragMode);
       break;
   }
 });
