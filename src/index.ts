@@ -14,6 +14,19 @@ import {
 // Non-blocking bridge server startup for live desktop overlay connection
 startBridgeServer().catch(() => {});
 
+// Ensure desktop companion window closes when CLI exits
+process.on("exit", () => {
+  stopDesktopCompanion();
+});
+process.on("SIGINT", () => {
+  stopDesktopCompanion();
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  stopDesktopCompanion();
+  process.exit(0);
+});
+
 export { MemoryMode, MEMORY_LIMITS, trimMemory };
 
 const program = new Command();

@@ -657,6 +657,7 @@ export async function startInteractiveChat(
 
     if (input.startsWith("/exit")) {
       console.log(chalk.gray("Goodbye!"));
+      stopDesktopCompanion();
       break;
     }
 
@@ -1335,5 +1336,6 @@ export async function startInteractiveChat(
   }
   
   rl.close();
+  stopDesktopCompanion();
   stopBridgeServer();
 }

@@ -16,10 +16,11 @@ pub fn run() {
                     let screen_size = monitor.size();
                     let scale_factor = monitor.scale_factor();
                     if let Ok(win_size) = window.outer_size() {
-                        let x = (24.0 * scale_factor) as i32;
-                        let taskbar_margin = (52.0 * scale_factor) as u32;
-                        let y = (screen_size.height as i32) - (win_size.height as i32) - (taskbar_margin as i32);
-                        let _ = window.set_position(tauri::PhysicalPosition::new(x, y.max(0)));
+                        let margin_right = (24.0 * scale_factor) as i32;
+                        let taskbar_margin = (60.0 * scale_factor) as i32;
+                        let x = (screen_size.width as i32) - (win_size.width as i32) - margin_right;
+                        let y = (screen_size.height as i32) - (win_size.height as i32) - taskbar_margin;
+                        let _ = window.set_position(tauri::PhysicalPosition::new(x.max(0), y.max(0)));
                     }
                 }
             }

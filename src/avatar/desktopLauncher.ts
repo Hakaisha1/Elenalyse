@@ -82,6 +82,13 @@ export function launchDesktopCompanion(options?: LaunchDesktopOptions): LaunchRe
     syncAvatarPersona(persona);
   }
 
+  // Ensure companion window closes when CLI process exits
+  try {
+    process.once("exit", () => {
+      stopDesktopCompanion();
+    });
+  } catch {}
+
   const projectRoot = getProjectRoot();
   const desktopDir = path.join(projectRoot, "desktop");
   const viteBin = path.join(desktopDir, "node_modules", "vite", "bin", "vite.js");
