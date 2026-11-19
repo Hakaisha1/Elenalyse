@@ -11,7 +11,7 @@ export type PersonaId = "eli" | "rei" | "sora" | "rin";
 export const PERSONA_MODEL_MAP: Record<PersonaId, string> = {
   eli: "/models/ELI_Model.vrm",
   rei: "/models/REI_Model.vrm",
-  sora: "/models/ELI_Model.vrm", // Fallback to ELI
+  sora: "/models/SORA_Model.vrm", // Dedicated SORA model
   rin: "/models/RIN_Model.vrm",  // Dedicated RIN model
 };
 
@@ -424,10 +424,10 @@ export class ReactiveVRMController {
     const upperChest: MockRotation = { x: 0, y: 0, z: 0 };
 
     // Natural Relaxed Arm Posture (downward along torso with slight asymmetry to eliminate stiff A-pose)
-    const leftUpperArm: MockRotation = { x: 0.02, y: -0.06, z: -1.22 };
-    const rightUpperArm: MockRotation = { x: -0.02, y: 0.08, z: 1.20 };
-    const leftLowerArm: MockRotation = { x: -0.25, y: -0.15, z: -0.02 };
-    const rightLowerArm: MockRotation = { x: 0.22, y: 0.18, z: 0.03 };
+    const leftUpperArm: MockRotation = { x: 0.02, y: -0.06, z: -1.33 };
+    const rightUpperArm: MockRotation = { x: -0.02, y: 0.08, z: 1.30 };
+    const leftLowerArm: MockRotation = { x: -0.35, y: -0.22, z: -0.03 };
+    const rightLowerArm: MockRotation = { x: 0.32, y: 0.25, z: 0.04 };
 
     const expressions: Record<string, number> = {
       blink: 0,
@@ -493,11 +493,11 @@ export class ReactiveVRMController {
 
         leftUpperArm.x = 0.02;
         leftUpperArm.y = -0.06;
-        leftUpperArm.z = -1.22;
+        leftUpperArm.z = -1.33;
 
-        leftLowerArm.x = -0.25;
-        leftLowerArm.y = -0.15;
-        leftLowerArm.z = -0.02;
+        leftLowerArm.x = -0.35;
+        leftLowerArm.y = -0.22;
+        leftLowerArm.z = -0.03;
 
         expressions.relaxed = 0.25;
         break;

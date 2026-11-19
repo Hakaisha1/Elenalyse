@@ -992,7 +992,7 @@ export async function startInteractiveChat(
         setConfig({ activePersona: "sora" });
         syncAvatarPersona("sora");
         emitAvatarState("idle", { detail: "live_model_switch", persona: "sora" });
-        console.log(chalk.green(`[Live] Switched 3D avatar model to SORA (ELI_Model.vrm)`));
+        console.log(chalk.green(`[Live] Switched 3D avatar model to SORA (SORA_Model.vrm)`));
         continue;
       }
 

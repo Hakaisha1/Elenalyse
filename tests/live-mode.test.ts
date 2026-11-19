@@ -101,20 +101,17 @@ describe("Live Mode & Desktop Companion Integration Suite", () => {
 
   // 2. Persona-to-3D VRM Model Resolution
   describe("3D VRM Model Resolution", () => {
-    it("resolves exact 3D models for ELI, REI, and RIN personas", () => {
+    it("resolves exact 3D models for all 4 personas (ELI, REI, RIN, SORA)", () => {
       expect(resolveModelFilename("eli")).toBe("ELI_Model.vrm");
       expect(resolveModelFilename("rei")).toBe("REI_Model.vrm");
       expect(resolveModelFilename("rin")).toBe("RIN_Model.vrm");
-    });
-
-    it("resolves graceful fallback models for secondary personas", () => {
-      expect(resolveModelFilename("sora")).toBe("ELI_Model.vrm");
+      expect(resolveModelFilename("sora")).toBe("SORA_Model.vrm");
     });
 
     it("is case-insensitive when resolving model filenames", () => {
       expect(resolveModelFilename("ELI")).toBe("ELI_Model.vrm");
       expect(resolveModelFilename("ReI")).toBe("REI_Model.vrm");
-      expect(resolveModelFilename("SoRa")).toBe("ELI_Model.vrm");
+      expect(resolveModelFilename("SoRa")).toBe("SORA_Model.vrm");
       expect(resolveModelFilename("RIN")).toBe("RIN_Model.vrm");
     });
   });

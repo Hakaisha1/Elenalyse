@@ -158,7 +158,7 @@ renderer.toneMappingExposure = 1.0;
 const scene = new THREE.Scene();
 
 // Camera setup with dynamic look target (calibrated headroom)
-const cameraLookTarget = new THREE.Vector3(0, 0.85, 0);
+const cameraLookTarget = new THREE.Vector3(0, 1.16, 0);
 
 const camera = new THREE.PerspectiveCamera(
   26,
@@ -166,7 +166,7 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   30
 );
-camera.position.set(0, 0.85, 3.45);
+camera.position.set(0, 1.16, 1.78);
 camera.lookAt(cameraLookTarget);
 
 // Mouse wheel to zoom in / out smoothly or pan vertically with Shift/Alt
@@ -569,41 +569,47 @@ function frameCameraToModel(vrm: VRM) {
   vrm.scene.updateMatrixWorld(true);
 
   const bbox = new THREE.Box3().setFromObject(vrm.scene);
-  const hipsNode = vrm.humanoid?.getNormalizedBoneNode("hips");
+  const headNode = vrm.humanoid?.getNormalizedBoneNode("head");
+  const chestNode = vrm.humanoid?.getNormalizedBoneNode("chest") || vrm.humanoid?.getNormalizedBoneNode("spine");
 
-  const hipsPos = new THREE.Vector3();
-  if (hipsNode) {
-    hipsNode.getWorldPosition(hipsPos);
-  } else {
-    hipsPos.set(0, bbox.min.y + (bbox.max.y - bbox.min.y) * 0.5, 0);
+  let headY = bbox.max.y - 0.12;
+  let chestY = 0.95;
+
+  if (headNode) {
+    const headPos = new THREE.Vector3();
+    headNode.getWorldPosition(headPos);
+    headY = headPos.y;
   }
 
-  // Framing half-body: from waist/upper-thighs (just below hips) to top of head
+  if (chestNode) {
+    const chestPos = new THREE.Vector3();
+    chestNode.getWorldPosition(chestPos);
+    chestY = chestPos.y;
+  }
+
+  // Framing half-body portrait: from upper-waist/chest to top of head
   const topY = bbox.max.y;
-  const bottomY = Math.max(bbox.min.y, hipsPos.y - 0.1);
-  const halfBodyHeight = Math.max(0.65, topY - bottomY);
-  const halfBodyCenterY = 0.85; // calibrated center with headroom for ahoge
+  const portraitCenterY = (headY + chestY) / 2 + 0.04;
+  const portraitHeight = Math.max(0.60, topY - (chestY - 0.25));
+  const portraitWidth = 0.52; // Shoulders + arms
 
-  // Upper body width (shoulders + relaxed arms)
-  const upperBodyWidth = 0.55;
-
-  const margin = 1.25; // comfortable headroom so ahoge never clips during nods
+  const margin = 1.16; // Headroom for ahoge
   const halfFovRad = THREE.MathUtils.degToRad(camera.fov / 2);
 
-  const distForHeight = ((halfBodyHeight * margin) / 2) / Math.tan(halfFovRad);
-  const distForWidth = ((upperBodyWidth * margin) / 2) / (Math.tan(halfFovRad) * camera.aspect);
+  const distForHeight = ((portraitHeight * margin) / 2) / Math.tan(halfFovRad);
+  const distForWidth = ((portraitWidth * margin) / 2) / (Math.tan(halfFovRad) * camera.aspect);
 
-  const optimalDistance = Math.max(3.45, Math.max(distForHeight, distForWidth));
+  // Calibrated optimal distance for authentic desktop companion bust portrait (~1.70 - 1.85m)
+  const optimalDistance = THREE.MathUtils.clamp(Math.max(distForHeight, distForWidth), 1.65, 1.88);
 
-  cameraLookTarget.set(0, halfBodyCenterY, 0);
-  camera.position.set(0, halfBodyCenterY, optimalDistance);
+  cameraLookTarget.set(0, portraitCenterY, 0);
+  camera.position.set(0, portraitCenterY, optimalDistance);
   camera.lookAt(cameraLookTarget);
 
   console.log("Framed Half-Body VRM:", {
     topY,
-    bottomY,
-    halfBodyHeight,
-    halfBodyCenterY,
+    portraitCenterY,
+    portraitHeight,
     optimalDistance,
   });
 }
@@ -1834,12 +1840,12 @@ function updateIdleAnimation(delta: number) {
 function toggleFaceFocus() {
   isFaceFocused = !isFaceFocused;
   if (isFaceFocused) {
-    userModelOffsetY = -0.35;
-    camera.position.z = 2.45;
+    userModelOffsetY = -0.12;
+    camera.position.z = 1.25;
     userModelRotationY = 0;
   } else {
     userModelOffsetY = 0;
-    camera.position.z = 3.45;
+    camera.position.z = 1.78;
     userModelRotationY = 0;
   }
   hud?.updateFaceFocus(isFaceFocused);
@@ -1848,7 +1854,8 @@ function toggleFaceFocus() {
 function resetView() {
   userModelOffsetY = 0;
   userModelRotationY = 0;
-  camera.position.z = 3.45;
+  camera.position.z = 1.78;
+  cameraLookTarget.set(0, 1.16, 0);
   isFaceFocused = false;
   hud?.updateFaceFocus(false);
 }

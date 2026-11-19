@@ -232,6 +232,9 @@ export function stopDesktopCompanion(): boolean {
  */
 export function resolveModelFilename(persona: string): string {
   const p = persona.toLowerCase();
+  if (p === "sora") {
+    return "SORA_Model.vrm";
+  }
   if (p === "rin") {
     return "RIN_Model.vrm";
   }
@@ -270,25 +273,43 @@ export function getLiveStatusSummary(): LiveStatusSummary {
  */
 export function renderLiveStatusBox(summary?: LiveStatusSummary): string {
   const s = summary ?? getLiveStatusSummary();
-  const endpoint = `http://127.0.0.1:${s.port}/events`;
-  const statusColor = s.bridgeOnline ? chalk.green("Online (listening)") : chalk.yellow("Starting...");
-  const clientsColor = s.connectedClients > 0
-    ? chalk.green(`${s.connectedClients} active`)
-    : chalk.gray("0 (waiting for desktop window)");
+  const width = 68;
+  const line = "─".repeat(width - 2);
+  const pad = (text: string, rawLen: number) => text + " ".repeat(Math.max(0, width - 4 - rawLen));
 
-  const personaFormatted = s.activePersona.toUpperCase();
-  const modelFormatted = chalk.cyan(s.activeModel);
+  const endpoint = `http://127.0.0.1:${s.port}/events`;
+  const epRaw = `Bridge Endpoint  : ${endpoint}`;
+  const epColored = chalk.bold("Bridge Endpoint  : ") + chalk.white(endpoint);
+
+  const stText = s.bridgeOnline ? "Online (listening)" : "Starting...";
+  const stRaw = `Bridge Status    : ${stText}`;
+  const stColored = chalk.bold("Bridge Status    : ") + (s.bridgeOnline ? chalk.green(stText) : chalk.yellow(stText));
+
+  const modRaw = `Active 3D Model  : ${s.activeModel}`;
+  const modColored = chalk.bold("Active 3D Model  : ") + chalk.cyan(s.activeModel);
+
+  const personaUpper = s.activePersona.toUpperCase();
+  const perRaw = `Active Persona   : ${personaUpper}`;
+  const perColored = chalk.bold("Active Persona   : ") + chalk.white(personaUpper);
+
+  const clText = s.connectedClients > 0
+    ? `${s.connectedClients} active`
+    : "0 (waiting for desktop window)";
+  const clRaw = `Connected Clients: ${clText}`;
+  const clColored = chalk.bold("Connected Clients: ") + (s.connectedClients > 0 ? chalk.green(clText) : chalk.gray(clText));
+
+  const tipText = "Tip: Use '/live eli', '/live rei', or '/live rin' to switch.";
 
   const lines = [
-    chalk.cyan("╭── 3D Reactive Avatar Live Mode ────────────────────────────────────╮"),
-    chalk.cyan("│ ") + `${chalk.bold("Bridge Endpoint  :")} ${endpoint.padEnd(50)}` + chalk.cyan("│"),
-    chalk.cyan("│ ") + `${chalk.bold("Bridge Status    :")} ${statusColor.padEnd(59)}` + chalk.cyan("│"),
-    chalk.cyan("│ ") + `${chalk.bold("Active 3D Model  :")} ${modelFormatted.padEnd(59)}` + chalk.cyan("│"),
-    chalk.cyan("│ ") + `${chalk.bold("Active Persona   :")} ${personaFormatted.padEnd(50)}` + chalk.cyan("│"),
-    chalk.cyan("│ ") + `${chalk.bold("Connected Clients:")} ${clientsColor.padEnd(59)}` + chalk.cyan("│"),
-    chalk.cyan("│                                                                    │"),
-    chalk.cyan("│ ") + chalk.gray("Tip: Use '/live eli', '/live rei', or '/live rin' to switch 3D models.") + chalk.cyan("  │"),
-    chalk.cyan("╰────────────────────────────────────────────────────────────────────╯"),
+    chalk.cyan(`╭── 3D Reactive Avatar Live Mode ${"─".repeat(width - 2 - 32)}╮`),
+    chalk.cyan("│ ") + pad(epColored, epRaw.length) + chalk.cyan(" │"),
+    chalk.cyan("│ ") + pad(stColored, stRaw.length) + chalk.cyan(" │"),
+    chalk.cyan("│ ") + pad(modColored, modRaw.length) + chalk.cyan(" │"),
+    chalk.cyan("│ ") + pad(perColored, perRaw.length) + chalk.cyan(" │"),
+    chalk.cyan("│ ") + pad(clColored, clRaw.length) + chalk.cyan(" │"),
+    chalk.cyan("│ ") + " ".repeat(width - 4) + chalk.cyan(" │"),
+    chalk.cyan("│ ") + pad(chalk.gray(tipText), tipText.length) + chalk.cyan(" │"),
+    chalk.cyan(`╰${line}╯`),
   ];
 
   return lines.join("\n");

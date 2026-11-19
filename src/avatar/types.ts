@@ -32,7 +32,7 @@ export const PersonaIdSchema = z.enum(PERSONA_IDS);
 export const PERSONA_MODEL_MAP: Record<PersonaId, string> = {
   eli: "/models/ELI_Model.vrm",
   rei: "/models/REI_Model.vrm",
-  sora: "/models/ELI_Model.vrm", // Fallback to ELI
+  sora: "/models/SORA_Model.vrm", // Dedicated SORA model
   rin: "/models/RIN_Model.vrm",  // Dedicated RIN model
 };
 

@@ -41,8 +41,12 @@ function serveVrmAssetsPlugin(): Plugin {
         for (const file of files) {
           if (file.endsWith(".vrm")) {
             const dest = path.join(distModelsDir, file);
-            if (!fs.existsSync(dest)) {
-              fs.copyFileSync(path.join(assetsDir, file), dest);
+            try {
+              if (!fs.existsSync(dest)) {
+                fs.copyFileSync(path.join(assetsDir, file), dest);
+              }
+            } catch (err) {
+              console.warn(`[serve-vrm-assets] Skipped copying ${file}:`, err);
             }
           }
         }

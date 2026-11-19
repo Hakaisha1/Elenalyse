@@ -47,21 +47,22 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
 
   // 1. Smart Persona-to-VRM Resolution & Graceful Fallback
   describe("Persona-to-VRM Model Resolution", () => {
-    it("resolves exact models for primary personas and fallbacks for secondary personas", () => {
+    it("resolves exact dedicated models for all 4 personas (ELI, REI, RIN, SORA)", () => {
       expect(resolveModelPath("eli")).toBe("/models/ELI_Model.vrm");
       expect(resolveModelPath("rei")).toBe("/models/REI_Model.vrm");
-      expect(resolveModelPath("rin")).toBe("/models/RIN_Model.vrm");  // Dedicated RIN model
-      expect(resolveModelPath("sora")).toBe("/models/ELI_Model.vrm"); // Fallback to ELI
+      expect(resolveModelPath("rin")).toBe("/models/RIN_Model.vrm");
+      expect(resolveModelPath("sora")).toBe("/models/SORA_Model.vrm");
     });
 
     it("identifies when VRM model reload is required vs. in-place persona switch", () => {
-      // Switching between personas sharing the same underlying model mesh requires NO reload
-      expect(shouldReloadModel("eli", "sora")).toBe(false);
-      expect(shouldReloadModel("sora", "eli")).toBe(false);
+      // Same persona requires NO reload
+      expect(shouldReloadModel("eli", "eli")).toBe(false);
+      expect(shouldReloadModel("sora", "sora")).toBe(false);
 
       // Switching between different 3D meshes requires a model reload
       expect(shouldReloadModel("eli", "rei")).toBe(true);
       expect(shouldReloadModel("eli", "rin")).toBe(true);
+      expect(shouldReloadModel("eli", "sora")).toBe(true);
       expect(shouldReloadModel("rei", "rin")).toBe(true);
       expect(shouldReloadModel("sora", "rin")).toBe(true);
       expect(shouldReloadModel("rei", "sora")).toBe(true);
@@ -137,7 +138,7 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
       // Contemplative arm poise
       expect(mockBones.rightUpperArm.rotation.x).toBeCloseTo(0.06, 2);
       expect(mockBones.rightLowerArm.rotation.x).toBeCloseTo(0.38, 2);
-      expect(mockBones.leftUpperArm.rotation.z).toBeCloseTo(-1.22, 2);
+      expect(mockBones.leftUpperArm.rotation.z).toBeCloseTo(-1.33, 2);
 
       // Relaxed blendshape
       expect(mockExpressions.relaxed).toBeCloseTo(0.25, 2);
@@ -191,14 +192,14 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
 
     it("maintains natural relaxed downward arm posture across states", () => {
       controller.update(0.1); // in idle
-      expect(mockBones.leftUpperArm.rotation.z).toBeCloseTo(-1.22, 2);
-      expect(mockBones.rightUpperArm.rotation.z).toBeCloseTo(1.20, 2);
+      expect(mockBones.leftUpperArm.rotation.z).toBeCloseTo(-1.33, 2);
+      expect(mockBones.rightUpperArm.rotation.z).toBeCloseTo(1.30, 2);
       expect(mockBones.leftLowerArm.rotation.x).toBeLessThan(0); // elbow bend
 
       controller.transitionTo("executing");
       controller.update(0.25);
-      expect(mockBones.leftUpperArm.rotation.z).toBeCloseTo(-1.22, 2);
-      expect(mockBones.rightUpperArm.rotation.z).toBeCloseTo(1.20, 2);
+      expect(mockBones.leftUpperArm.rotation.z).toBeCloseTo(-1.33, 2);
+      expect(mockBones.rightUpperArm.rotation.z).toBeCloseTo(1.30, 2);
     });
 
     it("error state activates pullback, head shake, and surprised/sad expressions", () => {

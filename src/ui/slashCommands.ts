@@ -174,7 +174,7 @@ export const LIVE_SUBCOMMANDS: SuggestionItem[] = [
     value: "sora",
     label: "sora",
     command: "sora",
-    description: "Switch 3D model to SORA (ELI_Model.vrm)",
+    description: "Switch 3D model to SORA (SORA_Model.vrm)",
   },
   {
     value: "status",
