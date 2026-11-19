@@ -58,8 +58,10 @@ export interface VRMLike {
 
 export interface PoseStateValues {
   head: MockRotation;
+  neck: MockRotation;
   spine: MockRotation;
   chest: MockRotation;
+  upperChest: MockRotation;
   leftUpperArm: MockRotation;
   rightUpperArm: MockRotation;
   leftLowerArm: MockRotation;
@@ -232,8 +234,10 @@ export class ReactiveVRMController {
     globalTime: number
   ): PoseStateValues {
     const head: MockRotation = { x: 0, y: 0, z: 0 };
+    const neck: MockRotation = { x: 0, y: 0, z: 0 };
     const spine: MockRotation = { x: 0, y: 0, z: 0 };
     const chest: MockRotation = { x: 0, y: 0, z: 0 };
+    const upperChest: MockRotation = { x: 0, y: 0, z: 0 };
 
     // Natural Relaxed Arm Posture (downward along torso with slight asymmetry to eliminate stiff A-pose)
     const leftUpperArm: MockRotation = { x: 0.02, y: -0.06, z: -1.22 };
@@ -272,11 +276,46 @@ export class ReactiveVRMController {
       }
 
       case "thinking": {
-        // Contemplative slight head tilt & pitch (looking slightly up/aside)
-        head.z = 0.07 + Math.sin(globalTime * 1.2) * 0.01;
-        head.x = -0.05;
-        head.y = 0.04;
-        expressions.relaxed = 0.1;
+        // Distributed Head + Neck Tilt (Total ~11°–14° lateral tilt + contemplative gaze)
+        neck.x = -0.04;
+        neck.y = 0.05;
+        neck.z = 0.07;
+
+        head.x = -0.06;
+        head.y = 0.08;
+        head.z = 0.14 + Math.sin(globalTime * 1.0) * 0.02;
+
+        // Upper-Body Asymmetry
+        upperChest.x = 0.01;
+        upperChest.y = 0.04;
+        upperChest.z = -0.03;
+
+        chest.x = 0.01;
+        chest.y = 0.02;
+        chest.z = -0.015;
+
+        spine.x = 0.01;
+        spine.y = 0;
+        spine.z = 0;
+
+        // Contemplative Arm Accent
+        rightUpperArm.x = 0.06;
+        rightUpperArm.y = 0.12;
+        rightUpperArm.z = 1.15;
+
+        rightLowerArm.x = 0.38;
+        rightLowerArm.y = 0.28;
+        rightLowerArm.z = 0.06;
+
+        leftUpperArm.x = 0.02;
+        leftUpperArm.y = -0.06;
+        leftUpperArm.z = -1.22;
+
+        leftLowerArm.x = -0.25;
+        leftLowerArm.y = -0.15;
+        leftLowerArm.z = -0.02;
+
+        expressions.relaxed = 0.25;
         break;
       }
 
@@ -323,8 +362,10 @@ export class ReactiveVRMController {
 
     return {
       head,
+      neck,
       spine,
       chest,
+      upperChest,
       leftUpperArm,
       rightUpperArm,
       leftLowerArm,
@@ -345,6 +386,11 @@ export class ReactiveVRMController {
       y: lerp(a.head.y, b.head.y),
       z: lerp(a.head.z, b.head.z),
     };
+    const neck: MockRotation = {
+      x: lerp(a.neck.x, b.neck.x),
+      y: lerp(a.neck.y, b.neck.y),
+      z: lerp(a.neck.z, b.neck.z),
+    };
     const spine: MockRotation = {
       x: lerp(a.spine.x, b.spine.x),
       y: lerp(a.spine.y, b.spine.y),
@@ -354,6 +400,11 @@ export class ReactiveVRMController {
       x: lerp(a.chest.x, b.chest.x),
       y: lerp(a.chest.y, b.chest.y),
       z: lerp(a.chest.z, b.chest.z),
+    };
+    const upperChest: MockRotation = {
+      x: lerp(a.upperChest.x, b.upperChest.x),
+      y: lerp(a.upperChest.y, b.upperChest.y),
+      z: lerp(a.upperChest.z, b.upperChest.z),
     };
     const leftUpperArm: MockRotation = {
       x: lerp(a.leftUpperArm.x, b.leftUpperArm.x),
@@ -390,8 +441,10 @@ export class ReactiveVRMController {
 
     return {
       head,
+      neck,
       spine,
       chest,
+      upperChest,
       leftUpperArm,
       rightUpperArm,
       leftLowerArm,
@@ -421,6 +474,13 @@ export class ReactiveVRMController {
       headBone.rotation.z = values.head.z;
     }
 
+    const neckBone = getBone("neck");
+    if (neckBone) {
+      neckBone.rotation.x = values.neck.x;
+      neckBone.rotation.y = values.neck.y;
+      neckBone.rotation.z = values.neck.z;
+    }
+
     const spineBone = getBone("spine");
     if (spineBone) {
       spineBone.rotation.x = values.spine.x;
@@ -433,6 +493,13 @@ export class ReactiveVRMController {
       chestBone.rotation.x = values.chest.x;
       chestBone.rotation.y = values.chest.y;
       chestBone.rotation.z = values.chest.z;
+    }
+
+    const upperChestBone = getBone("upperChest");
+    if (upperChestBone) {
+      upperChestBone.rotation.x = values.upperChest.x;
+      upperChestBone.rotation.y = values.upperChest.y;
+      upperChestBone.rotation.z = values.upperChest.z;
     }
 
     const leftUpperArmBone = getBone("leftUpperArm");

@@ -1477,24 +1477,28 @@ function updateIdleAnimation(delta: number) {
   // ==========================================
   breathCtrl.update(delta);
 
-  // Chest & Spine pitch (ditambah offset pose aktif & micro action)
+  const isIdle = vrmController.state === "idle";
+
+  // Chest & Spine pitch (ditambah offset pose aktif & micro action) - hanya diterapkan saat idle
   const spine = humanoid.getNormalizedBoneNode("spine");
   const chest = humanoid.getNormalizedBoneNode("chest");
   const upperChest = humanoid.getNormalizedBoneNode("upperChest");
 
-  if (spine) {
-    spine.rotation.x = breathCtrl.spinePitch + currentTorsoOffset.spine.x + microSpinePitch;
-    spine.rotation.z = -currentWeightShift * 0.009 + swayRoll; // spine counter-balance + postural sway
-    spine.rotation.y = -currentWeightShift * 0.003 + swayYaw;
-  }
+  if (isIdle) {
+    if (spine) {
+      spine.rotation.x = breathCtrl.spinePitch + currentTorsoOffset.spine.x + microSpinePitch;
+      spine.rotation.z = -currentWeightShift * 0.009 + swayRoll; // spine counter-balance + postural sway
+      spine.rotation.y = -currentWeightShift * 0.003 + swayYaw;
+    }
 
-  if (upperChest && chest) {
-    upperChest.rotation.x = breathCtrl.upperChestPitch;
-    chest.rotation.x = breathCtrl.chestPitch + currentTorsoOffset.chest.x + microSighChest;
-    chest.rotation.z = -currentWeightShift * 0.005;
-  } else if (chest) {
-    chest.rotation.x = breathCtrl.chestPitch + breathCtrl.upperChestPitch + currentTorsoOffset.chest.x + microSighChest;
-    chest.rotation.z = -currentWeightShift * 0.005;
+    if (upperChest && chest) {
+      upperChest.rotation.x = breathCtrl.upperChestPitch;
+      chest.rotation.x = breathCtrl.chestPitch + currentTorsoOffset.chest.x + microSighChest;
+      chest.rotation.z = -currentWeightShift * 0.005;
+    } else if (chest) {
+      chest.rotation.x = breathCtrl.chestPitch + breathCtrl.upperChestPitch + currentTorsoOffset.chest.x + microSighChest;
+      chest.rotation.z = -currentWeightShift * 0.005;
+    }
   }
 
   // ==========================================
@@ -1753,10 +1757,12 @@ function updateIdleAnimation(delta: number) {
   neckEuler.y = damp(neckEuler.y, headEuler.y * 0.40, 1.4, delta);
   neckEuler.z = damp(neckEuler.z, headEuler.z * 0.35, 1.4, delta);
 
-  const head = humanoid.getNormalizedBoneNode("head");
-  const neck = humanoid.getNormalizedBoneNode("neck");
-  if (head) head.rotation.copy(headEuler);
-  if (neck) neck.rotation.copy(neckEuler);
+  if (isIdle) {
+    const head = humanoid.getNormalizedBoneNode("head");
+    const neck = humanoid.getNormalizedBoneNode("neck");
+    if (head) head.rotation.copy(headEuler);
+    if (neck) neck.rotation.copy(neckEuler);
+  }
 
   // ==========================================
   // 6. MATA: BLINK KUUDERE (4-8s) & SACCADES TERKONTROL (3-6s)
@@ -1783,14 +1789,21 @@ function updateIdleAnimation(delta: number) {
     lookAtTarget.position.x = damp(lookAtTarget.position.x, forwardX, 2.5, delta);
     lookAtTarget.position.y = damp(lookAtTarget.position.y, forwardY, 2.5, delta);
   }
+
+  // During thinking state, cast gaze slightly upward and sideways for an authentic thoughtful gaze
+  if (vrmController.state === "thinking") {
+    lookAtTarget.position.x += 0.18;
+    lookAtTarget.position.y += 0.22;
+  }
   lookAtTarget.position.z = camera.position.z;
 
-  // Blink acak: 4-8s dengan durasi 0.25s tanpa overshoot
+  // Blink acak: 4-8s dengan durasi 0.25s tanpa overshoot (slow down during thinking)
   let activeBlink = 0;
   blinkTimer += delta;
-  if (blinkTimer >= nextBlinkAt) {
+  const effectiveNextBlinkAt = vrmController.state === "thinking" ? nextBlinkAt + 3.0 : nextBlinkAt;
+  if (blinkTimer >= effectiveNextBlinkAt) {
     const blinkDuration = IDLE_ARM_CONFIG.personality.blinkDuration;
-    const progress = (blinkTimer - nextBlinkAt) / blinkDuration;
+    const progress = (blinkTimer - effectiveNextBlinkAt) / blinkDuration;
 
     if (progress < 1) {
       const p = Math.sin(progress * Math.PI);

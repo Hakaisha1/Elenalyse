@@ -16,8 +16,10 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
   beforeEach(() => {
     mockBones = {
       head: { rotation: { x: 0, y: 0, z: 0 } },
+      neck: { rotation: { x: 0, y: 0, z: 0 } },
       spine: { rotation: { x: 0, y: 0, z: 0 } },
       chest: { rotation: { x: 0, y: 0, z: 0 } },
+      upperChest: { rotation: { x: 0, y: 0, z: 0 } },
       leftUpperArm: { rotation: { x: 0, y: 0, z: 0 } },
       rightUpperArm: { rotation: { x: 0, y: 0, z: 0 } },
       leftLowerArm: { rotation: { x: 0, y: 0, z: 0 } },
@@ -113,14 +115,43 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
       expect(mockExpressions.relaxed).toBeCloseTo(0.3, 2);
     });
 
-    it("thinking state activates contemplative head tilt and pitch", () => {
+    it("thinking state activates contemplative head + neck tilt, upper-body asymmetry, and arm poise", () => {
       controller.transitionTo("thinking");
       controller.update(0.25); // Complete crossfade
       controller.update(0.1);
 
-      // Head tilt z > 0 and pitch x < 0 (looking slightly upward/aside)
-      expect(mockBones.head.rotation.z).toBeGreaterThan(0.05);
-      expect(mockBones.head.rotation.x).toBeLessThan(0);
+      // Distributed Head + Neck Tilt (total ~11°-14° lateral tilt)
+      expect(mockBones.neck.rotation.z).toBeCloseTo(0.07, 2);
+      expect(mockBones.neck.rotation.x).toBeCloseTo(-0.04, 2);
+      expect(mockBones.neck.rotation.y).toBeCloseTo(0.05, 2);
+
+      expect(mockBones.head.rotation.z).toBeGreaterThan(0.12); // ~0.14 lateral tilt
+      expect(mockBones.head.rotation.x).toBeCloseTo(-0.06, 2);
+      expect(mockBones.head.rotation.y).toBeCloseTo(0.08, 2);
+
+      // Upper-body asymmetry
+      expect(mockBones.upperChest.rotation.z).toBeCloseTo(-0.03, 2);
+      expect(mockBones.chest.rotation.z).toBeCloseTo(-0.015, 2);
+      expect(mockBones.spine.rotation.x).toBeCloseTo(0.01, 2);
+
+      // Contemplative arm poise
+      expect(mockBones.rightUpperArm.rotation.x).toBeCloseTo(0.06, 2);
+      expect(mockBones.rightLowerArm.rotation.x).toBeCloseTo(0.38, 2);
+      expect(mockBones.leftUpperArm.rotation.z).toBeCloseTo(-1.22, 2);
+
+      // Relaxed blendshape
+      expect(mockExpressions.relaxed).toBeCloseTo(0.25, 2);
+    });
+
+    it("resets neck and upperChest to default in idle state", () => {
+      controller.transitionTo("thinking");
+      controller.update(0.25);
+      expect(mockBones.neck.rotation.z).toBeGreaterThan(0);
+
+      controller.transitionTo("idle");
+      controller.update(0.25);
+      expect(mockBones.neck.rotation.z).toBeCloseTo(0, 2);
+      expect(mockBones.upperChest.rotation.z).toBeCloseTo(0, 2);
     });
 
     it("executing state activates forward lean and scanning motion", () => {
@@ -162,7 +193,7 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
       expect(mockBones.rightUpperArm.rotation.z).toBeCloseTo(1.20, 2);
       expect(mockBones.leftLowerArm.rotation.x).toBeLessThan(0); // elbow bend
 
-      controller.transitionTo("thinking");
+      controller.transitionTo("executing");
       controller.update(0.25);
       expect(mockBones.leftUpperArm.rotation.z).toBeCloseTo(-1.22, 2);
       expect(mockBones.rightUpperArm.rotation.z).toBeCloseTo(1.20, 2);
