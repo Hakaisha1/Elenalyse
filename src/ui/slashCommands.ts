@@ -165,6 +165,18 @@ export const LIVE_SUBCOMMANDS: SuggestionItem[] = [
     description: "Switch 3D model to REI (REI_Model.vrm)",
   },
   {
+    value: "rin",
+    label: "rin",
+    command: "rin",
+    description: "Switch 3D model to RIN (RIN_Model.vrm)",
+  },
+  {
+    value: "sora",
+    label: "sora",
+    command: "sora",
+    description: "Switch 3D model to SORA (ELI_Model.vrm)",
+  },
+  {
     value: "status",
     label: "status",
     command: "status",

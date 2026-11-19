@@ -56,6 +56,7 @@ describe("Live Mode & Desktop Companion Integration Suite", () => {
       expect(values).toContain("launch");
       expect(values).toContain("eli");
       expect(values).toContain("rei");
+      expect(values).toContain("rin");
       expect(values).toContain("status");
       expect(values).toContain("off");
     });
@@ -76,9 +77,17 @@ describe("Live Mode & Desktop Companion Integration Suite", () => {
       expect(eliSugg.items.length).toBe(1);
       expect(eliSugg.items[0].value).toBe("eli");
 
-      const reiSugg = getContextualSuggestions("/live r");
+      const rSugg = getContextualSuggestions("/live r");
+      expect(rSugg.items.length).toBe(2);
+      expect(rSugg.items.map((i) => i.value)).toEqual(["rei", "rin"]);
+
+      const reiSugg = getContextualSuggestions("/live re");
       expect(reiSugg.items.length).toBe(1);
       expect(reiSugg.items[0].value).toBe("rei");
+
+      const rinSugg = getContextualSuggestions("/live ri");
+      expect(rinSugg.items.length).toBe(1);
+      expect(rinSugg.items[0].value).toBe("rin");
 
       const statSugg = getContextualSuggestions("/live stat");
       expect(statSugg.items.length).toBe(1);
@@ -92,21 +101,21 @@ describe("Live Mode & Desktop Companion Integration Suite", () => {
 
   // 2. Persona-to-3D VRM Model Resolution
   describe("3D VRM Model Resolution", () => {
-    it("resolves exact 3D models for ELI and REI personas", () => {
+    it("resolves exact 3D models for ELI, REI, and RIN personas", () => {
       expect(resolveModelFilename("eli")).toBe("ELI_Model.vrm");
       expect(resolveModelFilename("rei")).toBe("REI_Model.vrm");
+      expect(resolveModelFilename("rin")).toBe("RIN_Model.vrm");
     });
 
     it("resolves graceful fallback models for secondary personas", () => {
       expect(resolveModelFilename("sora")).toBe("ELI_Model.vrm");
-      expect(resolveModelFilename("rin")).toBe("REI_Model.vrm");
     });
 
     it("is case-insensitive when resolving model filenames", () => {
       expect(resolveModelFilename("ELI")).toBe("ELI_Model.vrm");
       expect(resolveModelFilename("ReI")).toBe("REI_Model.vrm");
       expect(resolveModelFilename("SoRa")).toBe("ELI_Model.vrm");
-      expect(resolveModelFilename("RIN")).toBe("REI_Model.vrm");
+      expect(resolveModelFilename("RIN")).toBe("RIN_Model.vrm");
     });
   });
 
@@ -159,6 +168,14 @@ describe("Live Mode & Desktop Companion Integration Suite", () => {
       expect(summary.activePersona).toBe("rei");
       expect(summary.activeModel).toBe("REI_Model.vrm");
       expect(broadcaster.getCurrentPayload().persona).toBe("rei");
+
+      // Switch to RIN
+      setConfig({ activePersona: "rin" });
+      syncAvatarPersona("rin");
+      summary = getLiveStatusSummary();
+      expect(summary.activePersona).toBe("rin");
+      expect(summary.activeModel).toBe("RIN_Model.vrm");
+      expect(broadcaster.getCurrentPayload().persona).toBe("rin");
     });
   });
 

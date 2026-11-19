@@ -976,6 +976,26 @@ export async function startInteractiveChat(
         continue;
       }
 
+      if (subCommand === "rin") {
+        activePersona = "rin";
+        config.activePersona = "rin";
+        setConfig({ activePersona: "rin" });
+        syncAvatarPersona("rin");
+        emitAvatarState("idle", { detail: "live_model_switch", persona: "rin" });
+        console.log(chalk.green(`[Live] Switched 3D avatar model to RIN (RIN_Model.vrm)`));
+        continue;
+      }
+
+      if (subCommand === "sora") {
+        activePersona = "sora";
+        config.activePersona = "sora";
+        setConfig({ activePersona: "sora" });
+        syncAvatarPersona("sora");
+        emitAvatarState("idle", { detail: "live_model_switch", persona: "sora" });
+        console.log(chalk.green(`[Live] Switched 3D avatar model to SORA (ELI_Model.vrm)`));
+        continue;
+      }
+
       if (subCommand === "status") {
         console.log("\n" + renderLiveStatusBox() + "\n");
         continue;
@@ -1003,7 +1023,7 @@ export async function startInteractiveChat(
         continue;
       }
 
-      console.log(chalk.red(`[Live] Unknown subcommand '${subCommand}'! Use: /live [on|off|status|eli|rei|launch]`));
+      console.log(chalk.red(`[Live] Unknown subcommand '${subCommand}'! Use: /live [on|off|status|eli|rei|rin|sora|launch]`));
       continue;
     }
 

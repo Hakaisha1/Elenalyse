@@ -33,7 +33,7 @@ export const PERSONA_MODEL_MAP: Record<PersonaId, string> = {
   eli: "/models/ELI_Model.vrm",
   rei: "/models/REI_Model.vrm",
   sora: "/models/ELI_Model.vrm", // Fallback to ELI
-  rin: "/models/REI_Model.vrm",  // Fallback to REI
+  rin: "/models/RIN_Model.vrm",  // Dedicated RIN model
 };
 
 export function resolveModelPath(persona: PersonaId): string {

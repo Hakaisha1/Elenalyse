@@ -111,6 +111,16 @@ program
       syncAvatarPersona("rei");
       console.log(chalk.green("[Live] Switched 3D avatar model to REI (REI_Model.vrm)"));
       launchDesktopCompanion({ persona: "rei", mode: options?.mode });
+    } else if (act === "rin") {
+      setConfig({ activePersona: "rin" });
+      syncAvatarPersona("rin");
+      console.log(chalk.green("[Live] Switched 3D avatar model to RIN (RIN_Model.vrm)"));
+      launchDesktopCompanion({ persona: "rin", mode: options?.mode });
+    } else if (act === "sora") {
+      setConfig({ activePersona: "sora" });
+      syncAvatarPersona("sora");
+      console.log(chalk.green("[Live] Switched 3D avatar model to SORA (ELI_Model.vrm)"));
+      launchDesktopCompanion({ persona: "sora", mode: options?.mode });
     } else if (!act || act === "launch" || act === "on") {
       const launchResult = launchDesktopCompanion({ mode: options?.mode });
       if (launchResult.spawned) {
@@ -119,7 +129,7 @@ program
         console.log(chalk.gray(`[Live] ${launchResult.message}`));
       }
     } else {
-      console.log(chalk.red(`Error: Unknown live action '${action}'. Available: status, eli, rei, launch, off.`));
+      console.log(chalk.red(`Error: Unknown live action '${action}'. Available: status, eli, rei, rin, sora, launch, off.`));
       process.exit(1);
     }
 

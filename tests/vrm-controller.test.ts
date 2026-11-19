@@ -50,19 +50,19 @@ describe("ReactiveVRMController & 3D Avatar Rendering Suite", () => {
     it("resolves exact models for primary personas and fallbacks for secondary personas", () => {
       expect(resolveModelPath("eli")).toBe("/models/ELI_Model.vrm");
       expect(resolveModelPath("rei")).toBe("/models/REI_Model.vrm");
+      expect(resolveModelPath("rin")).toBe("/models/RIN_Model.vrm");  // Dedicated RIN model
       expect(resolveModelPath("sora")).toBe("/models/ELI_Model.vrm"); // Fallback to ELI
-      expect(resolveModelPath("rin")).toBe("/models/REI_Model.vrm");  // Fallback to REI
     });
 
     it("identifies when VRM model reload is required vs. in-place persona switch", () => {
       // Switching between personas sharing the same underlying model mesh requires NO reload
       expect(shouldReloadModel("eli", "sora")).toBe(false);
       expect(shouldReloadModel("sora", "eli")).toBe(false);
-      expect(shouldReloadModel("rei", "rin")).toBe(false);
-      expect(shouldReloadModel("rin", "rei")).toBe(false);
 
       // Switching between different 3D meshes requires a model reload
       expect(shouldReloadModel("eli", "rei")).toBe(true);
+      expect(shouldReloadModel("eli", "rin")).toBe(true);
+      expect(shouldReloadModel("rei", "rin")).toBe(true);
       expect(shouldReloadModel("sora", "rin")).toBe(true);
       expect(shouldReloadModel("rei", "sora")).toBe(true);
     });

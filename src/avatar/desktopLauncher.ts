@@ -232,7 +232,10 @@ export function stopDesktopCompanion(): boolean {
  */
 export function resolveModelFilename(persona: string): string {
   const p = persona.toLowerCase();
-  if (p === "rei" || p === "rin") {
+  if (p === "rin") {
+    return "RIN_Model.vrm";
+  }
+  if (p === "rei") {
     return "REI_Model.vrm";
   }
   return "ELI_Model.vrm";
@@ -284,7 +287,7 @@ export function renderLiveStatusBox(summary?: LiveStatusSummary): string {
     chalk.cyan("│ ") + `${chalk.bold("Active Persona   :")} ${personaFormatted.padEnd(50)}` + chalk.cyan("│"),
     chalk.cyan("│ ") + `${chalk.bold("Connected Clients:")} ${clientsColor.padEnd(59)}` + chalk.cyan("│"),
     chalk.cyan("│                                                                    │"),
-    chalk.cyan("│ ") + chalk.gray("Tip: Use '/live eli' or '/live rei' to switch 3D models seamlessly.") + chalk.cyan(" │"),
+    chalk.cyan("│ ") + chalk.gray("Tip: Use '/live eli', '/live rei', or '/live rin' to switch 3D models.") + chalk.cyan("  │"),
     chalk.cyan("╰────────────────────────────────────────────────────────────────────╯"),
   ];
 
