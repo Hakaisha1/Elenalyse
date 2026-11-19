@@ -11,13 +11,13 @@ import {
 } from "./avatar/ReactiveVRMController.js";
 import { DiagnosticHUD } from "./ui/DiagnosticHUD.js";
 
-// --- Tauri Window Dragging & Bottom-Left Positioning ---
+// --- Tauri Window Dragging & Bottom-Right Positioning ---
 let appWindow: any = null;
 try {
   appWindow = getCurrentWindow();
 
-  // Automatically ensure window is docked at bottom-left corner
-  async function dockBottomLeft() {
+  // Automatically ensure window is docked at bottom-right corner (never overlaps terminal text)
+  async function dockBottomRight() {
     try {
       const monitor = await currentMonitor();
       if (monitor) {
@@ -26,16 +26,18 @@ try {
         const winPhysical = await appWindow.outerSize();
         const winLogical = winPhysical.toLogical(scaleFactor);
 
-        const x = 24;
-        const taskbarHeight = 50;
+        const marginX = 24;
+        const taskbarHeight = 60;
+        const x = Math.max(0, screenLogical.width - winLogical.width - marginX);
         const y = Math.max(0, screenLogical.height - winLogical.height - taskbarHeight);
         await appWindow.setPosition(new LogicalPosition(x, y));
+        await appWindow.show?.();
       }
     } catch (e) {
       console.debug("Could not position window:", e);
     }
   }
-  dockBottomLeft();
+  dockBottomRight();
 } catch (err) {
   console.debug("Tauri window API not available (browser preview mode):", err);
 }

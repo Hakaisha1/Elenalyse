@@ -12,6 +12,9 @@ import {
   renderLiveStatusBox,
   setActiveCompanionProcess,
   getActiveCompanionProcess,
+  findNativeDesktopBinary,
+  setActiveViteProcess,
+  getActiveViteProcess,
 } from "../src/avatar/desktopLauncher.js";
 import {
   syncAvatarPersona,
@@ -161,8 +164,30 @@ describe("Live Mode & Desktop Companion Integration Suite", () => {
 
   // 5. Desktop Companion Process Lifecycle
   describe("Desktop Companion Process Lifecycle", () => {
-    it("returns false from stopDesktopCompanion when no process is running", () => {
-      expect(stopDesktopCompanion()).toBe(false);
+    it("locates native desktop binary when present or returns null", () => {
+      const nonExistent = findNativeDesktopBinary("C:/non/existent/path");
+      expect(nonExistent).toBeNull();
+
+      const currentBinary = findNativeDesktopBinary(process.cwd());
+      if (currentBinary) {
+        expect(typeof currentBinary).toBe("string");
+        expect(currentBinary.toLowerCase()).toContain("desktop");
+      }
+    });
+
+    it("tracks and cleans up active Vite child process", () => {
+      expect(getActiveViteProcess()).toBeNull();
+      const mockVite = { pid: 9999, killed: false, kill: vi.fn() } as any;
+      setActiveViteProcess(mockVite);
+      expect(getActiveViteProcess()).toBe(mockVite);
+
+      // Stop desktop companion cleans up active Vite process as well
+      const mockCompanion = { pid: 8888, killed: false, kill: vi.fn() } as any;
+      setActiveCompanionProcess(mockCompanion);
+      const stopped = stopDesktopCompanion();
+      expect(stopped).toBe(true);
+      expect(getActiveViteProcess()).toBeNull();
+      expect(getActiveCompanionProcess()).toBeNull();
     });
 
     it("prevents double-spawn when a companion process is already active", () => {

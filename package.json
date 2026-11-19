@@ -22,7 +22,7 @@
     "test:blackbox-report": "tsx scripts/generate-blackbox-report.ts",
     "desktop:dev": "npm --prefix desktop run dev",
     "desktop:build": "npm --prefix desktop run build",
-    "desktop:tauri": "npm --prefix desktop run tauri"
+    "desktop:tauri": "npm --prefix desktop run tauri -- dev"
   },
   "repository": {
     "type": "git",

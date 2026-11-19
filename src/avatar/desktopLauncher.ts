@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from "child_process";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import chalk from "chalk";
@@ -8,10 +9,11 @@ import { DEFAULT_BRIDGE_PORT } from "./types.js";
 import { getConfig } from "../config.js";
 
 let activeCompanionProcess: ChildProcess | null = null;
+let activeViteProcess: ChildProcess | null = null;
 
 export interface LaunchDesktopOptions {
   persona?: string;
-  mode?: "dev" | "tauri";
+  mode?: "dev" | "tauri" | "auto";
 }
 
 export interface LaunchResult {
@@ -42,6 +44,27 @@ function getProjectRoot(): string {
 }
 
 /**
+ * Locate compiled native desktop binary if available.
+ */
+export function findNativeDesktopBinary(projectRoot: string): string | null {
+  const isWin = process.platform === "win32";
+  const binaryName = isWin ? "desktop.exe" : "desktop";
+
+  const candidates = [
+    path.join(projectRoot, "desktop", "src-tauri", "target", "release", binaryName),
+    path.join(projectRoot, "desktop", "src-tauri", "target", "debug", binaryName),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Launch the desktop companion application in the background detached mode.
  * Decoupled from the Node CLI lifecycle via .unref().
  */
@@ -59,20 +82,76 @@ export function launchDesktopCompanion(options?: LaunchDesktopOptions): LaunchRe
     syncAvatarPersona(persona);
   }
 
-  const mode = options?.mode ?? "dev";
-  const scriptName = mode === "tauri" ? "desktop:tauri" : "desktop:dev";
   const projectRoot = getProjectRoot();
+  const desktopDir = path.join(projectRoot, "desktop");
+  const viteBin = path.join(desktopDir, "node_modules", "vite", "bin", "vite.js");
+  const tauriCli = path.join(desktopDir, "node_modules", "@tauri-apps", "cli", "tauri.js");
+  const nativeBinary = findNativeDesktopBinary(projectRoot);
 
   try {
-    const isWin = process.platform === "win32";
-    const npmCmd = isWin ? "npm.cmd" : "npm";
+    // 1. If native compiled Tauri executable exists, ensure Vite is up and run the window
+    if (nativeBinary) {
+      if (fs.existsSync(viteBin)) {
+        try {
+          const viteChild = spawn(process.execPath, [viteBin], {
+            cwd: desktopDir,
+            detached: true,
+            stdio: "ignore",
+          });
+          viteChild.unref();
+          activeViteProcess = viteChild;
+        } catch {
+          // If already running or cannot spawn, proceed to launch window
+        }
+      }
 
-    const child = spawn(npmCmd, ["run", scriptName], {
-      cwd: projectRoot,
-      detached: true,
-      stdio: "ignore",
-      shell: isWin,
-    });
+      const child = spawn(nativeBinary, [], {
+        cwd: desktopDir,
+        detached: true,
+        stdio: "ignore",
+      });
+
+      child.unref();
+      activeCompanionProcess = child;
+
+      return {
+        spawned: true,
+        pid: child.pid,
+        message: `Desktop companion window (${path.basename(nativeBinary)}) launched in background.`,
+      };
+    }
+
+    // 2. If no prebuilt native binary exists, spawn Tauri dev via local CLI
+    if (fs.existsSync(tauriCli)) {
+      const child = spawn(process.execPath, [tauriCli, "dev"], {
+        cwd: desktopDir,
+        detached: true,
+        stdio: "ignore",
+      });
+
+      child.unref();
+      activeCompanionProcess = child;
+
+      return {
+        spawned: true,
+        pid: child.pid,
+        message: "Desktop companion window (tauri dev) launched in background.",
+      };
+    }
+
+    // 3. Fallback: launch web preview dev server without DEP0190 warning
+    const isWin = process.platform === "win32";
+    const child = isWin
+      ? spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npm run desktop:dev"], {
+          cwd: projectRoot,
+          detached: true,
+          stdio: "ignore",
+        })
+      : spawn("npm", ["run", "desktop:dev"], {
+          cwd: projectRoot,
+          detached: true,
+          stdio: "ignore",
+        });
 
     child.unref();
     activeCompanionProcess = child;
@@ -80,7 +159,7 @@ export function launchDesktopCompanion(options?: LaunchDesktopOptions): LaunchRe
     return {
       spawned: true,
       pid: child.pid,
-      message: `Desktop companion (${scriptName}) launched in background.`,
+      message: "Desktop companion (dev web) launched in background.",
     };
   } catch (err: any) {
     return {
@@ -94,24 +173,51 @@ export function launchDesktopCompanion(options?: LaunchDesktopOptions): LaunchRe
  * Stop the background desktop companion process if currently running.
  */
 export function stopDesktopCompanion(): boolean {
-  if (!activeCompanionProcess || !activeCompanionProcess.pid) {
-    return false;
-  }
+  let stopped = false;
 
-  try {
-    if (process.platform === "win32") {
-      spawn("taskkill", ["/pid", activeCompanionProcess.pid.toString(), "/f", "/t"], {
-        stdio: "ignore",
-      });
-    } else {
-      activeCompanionProcess.kill();
+  if (activeCompanionProcess && activeCompanionProcess.pid) {
+    try {
+      if (process.platform === "win32") {
+        spawn("taskkill", ["/pid", activeCompanionProcess.pid.toString(), "/f", "/t"], {
+          stdio: "ignore",
+        });
+      } else {
+        activeCompanionProcess.kill();
+      }
+    } catch {
+      // Ignore errors during termination
     }
-  } catch {
-    // Ignore errors during termination
+
+    activeCompanionProcess = null;
+    stopped = true;
   }
 
-  activeCompanionProcess = null;
-  return true;
+  if (activeViteProcess && activeViteProcess.pid) {
+    try {
+      if (process.platform === "win32") {
+        spawn("taskkill", ["/pid", activeViteProcess.pid.toString(), "/f", "/t"], {
+          stdio: "ignore",
+        });
+      } else {
+        activeViteProcess.kill();
+      }
+    } catch {
+      // Ignore errors during termination
+    }
+
+    activeViteProcess = null;
+  }
+
+  // On Windows, additionally ensure any lingering desktop.exe instance is stopped
+  if (stopped && process.platform === "win32") {
+    try {
+      spawn("taskkill", ["/im", "desktop.exe", "/f"], { stdio: "ignore" });
+    } catch {
+      // Ignore if no desktop.exe is running
+    }
+  }
+
+  return stopped;
 }
 
 /**
@@ -187,4 +293,12 @@ export function getActiveCompanionProcess(): ChildProcess | null {
 
 export function setActiveCompanionProcess(proc: ChildProcess | null): void {
   activeCompanionProcess = proc;
+}
+
+export function getActiveViteProcess(): ChildProcess | null {
+  return activeViteProcess;
+}
+
+export function setActiveViteProcess(proc: ChildProcess | null): void {
+  activeViteProcess = proc;
 }
