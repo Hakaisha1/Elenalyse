@@ -15,6 +15,8 @@ import {
   findNativeDesktopBinary,
   setActiveViteProcess,
   getActiveViteProcess,
+  areDesktopDependenciesInstalled,
+  ensureDesktopDependencies,
 } from "../src/avatar/desktopLauncher.js";
 import {
   syncAvatarPersona,
@@ -238,6 +240,19 @@ describe("Live Mode & Desktop Companion Integration Suite", () => {
 
       stopBridgeServer();
       expect(getLiveStatusSummary().bridgeOnline).toBe(false);
+    });
+  });
+
+  // 7. Desktop Companion Dependencies Detection
+  describe("Desktop Companion Dependencies Detection", () => {
+    it("detects installed desktop dependencies in the workspace", () => {
+      const isInstalled = areDesktopDependenciesInstalled(process.cwd());
+      expect(isInstalled).toBe(true);
+    });
+
+    it("ensureDesktopDependencies returns true when dependencies exist", () => {
+      const ensured = ensureDesktopDependencies(process.cwd());
+      expect(ensured).toBe(true);
     });
   });
 });

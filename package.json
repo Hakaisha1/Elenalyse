@@ -20,9 +20,11 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:blackbox-report": "tsx scripts/generate-blackbox-report.ts",
+    "desktop:install": "npm --prefix desktop install",
     "desktop:dev": "npm --prefix desktop run dev",
     "desktop:build": "npm --prefix desktop run build",
-    "desktop:tauri": "npm --prefix desktop run tauri -- dev"
+    "desktop:tauri": "npm --prefix desktop run tauri -- dev",
+    "postinstall": "npm --prefix desktop install"
   },
   "repository": {
     "type": "git",

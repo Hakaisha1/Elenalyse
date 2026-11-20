@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from "child_process";
+import { spawn, execSync, ChildProcess } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -65,6 +65,38 @@ export function findNativeDesktopBinary(projectRoot: string): string | null {
 }
 
 /**
+ * Verify whether desktop live companion dependencies (Three.js, @pixiv/three-vrm) are installed.
+ */
+export function areDesktopDependenciesInstalled(projectRoot: string): boolean {
+  const desktopDir = path.join(projectRoot, "desktop");
+  const threePkg = path.join(desktopDir, "node_modules", "three", "package.json");
+  const vrmPkg = path.join(desktopDir, "node_modules", "@pixiv", "three-vrm", "package.json");
+  return fs.existsSync(threePkg) && fs.existsSync(vrmPkg);
+}
+
+/**
+ * Ensures desktop companion dependencies are installed before launching.
+ */
+export function ensureDesktopDependencies(projectRoot: string): boolean {
+  if (areDesktopDependenciesInstalled(projectRoot)) {
+    return true;
+  }
+
+  try {
+    console.log(chalk.yellow("[Live] 3D desktop companion dependencies missing. Installing (npm --prefix desktop install)..."));
+    execSync("npm --prefix desktop install", {
+      cwd: projectRoot,
+      stdio: "inherit",
+    });
+    console.log(chalk.green("[Live] Desktop dependencies installed successfully."));
+    return areDesktopDependenciesInstalled(projectRoot);
+  } catch (err: any) {
+    console.error(chalk.red(`[Live] Failed to automatically install desktop dependencies: ${err?.message || err}`));
+    return false;
+  }
+}
+
+/**
  * Launch the desktop companion application in the background detached mode.
  * Decoupled from the Node CLI lifecycle via .unref().
  */
@@ -90,6 +122,15 @@ export function launchDesktopCompanion(options?: LaunchDesktopOptions): LaunchRe
   } catch {}
 
   const projectRoot = getProjectRoot();
+
+  // Guard: Auto-install or ensure desktop dependencies are available before launching Vite / Tauri
+  if (!ensureDesktopDependencies(projectRoot)) {
+    return {
+      spawned: false,
+      message: "Desktop companion dependencies are missing. Run 'npm --prefix desktop install' manually.",
+    };
+  }
+
   const desktopDir = path.join(projectRoot, "desktop");
   const viteBin = path.join(desktopDir, "node_modules", "vite", "bin", "vite.js");
   const tauriCli = path.join(desktopDir, "node_modules", "@tauri-apps", "cli", "tauri.js");
@@ -298,7 +339,7 @@ export function renderLiveStatusBox(summary?: LiveStatusSummary): string {
   const clRaw = `Connected Clients: ${clText}`;
   const clColored = chalk.bold("Connected Clients: ") + (s.connectedClients > 0 ? chalk.green(clText) : chalk.gray(clText));
 
-  const tipText = "Tip: Use '/live eli', '/live rei', or '/live rin' to switch.";
+  const tipText = "Tip: Use '/live eli', '/live rei', '/live rin', or '/live sora'.";
 
   const lines = [
     chalk.cyan(`╭── 3D Reactive Avatar Live Mode ${"─".repeat(width - 2 - 32)}╮`),
